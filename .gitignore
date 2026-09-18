@@ -1,0 +1,20 @@
+# Entorno virtual
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Archivos de salida
+output/
+
+# Datos privados (nombres y teléfonos reales)
+data/hermanos.json
+data/ausencias.json
+data/*.pdf
+
+# Archivos de configuración de IDEs
+.vscode/
+.idea/
+
+# Guia de Roles
+roles.txt
