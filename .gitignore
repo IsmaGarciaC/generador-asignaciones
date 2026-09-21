@@ -18,3 +18,5 @@ data/*.pdf
 
 # Guia de Roles
 roles.txt
+*.xlsx
+*xlsx#
