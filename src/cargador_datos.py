@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-roles = {"acomodador", "microfonos", "plataforma", "lector_martes", "lector_domingo", "presidente", "sonido"}
+roles = {"acomodador", "microfonos", "plataforma", "lector_martes", "lector_domingo", "presidente", "audio", "video"}
 
 def cargar_hermanos(ruta_archivo):
     with open(ruta_archivo, 'r', encoding='utf-8') as archivo:
