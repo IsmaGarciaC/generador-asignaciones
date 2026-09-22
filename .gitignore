@@ -1,22 +1,17 @@
-# Entorno virtual
+# Entorno virtual y caché de Python
 venv/
-env/
 __pycache__/
 *.pyc
 
-# Archivos de salida
-output/
+# Salidas generadas y archivos de estado local
+salida/
+*.xlsx
+*.png
 
-# Datos privados (nombres y teléfonos reales)
-data/hermanos.json
+# Archivos de estado y ausencias locales (mantienen los datos privados)
+data/estado.json
 data/ausencias.json
-data/*.pdf
 
-# Archivos de configuración de IDEs
+# Archivos de configuración del editor
 .vscode/
 .idea/
-
-# Guia de Roles
-roles.txt
-*.xlsx
-*xlsx#

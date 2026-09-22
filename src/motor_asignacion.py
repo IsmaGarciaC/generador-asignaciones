@@ -9,7 +9,7 @@ PUESTOS_REQUERIDOS = {
     "plataforma": 1,
     "lector_martes": 1,
     "microfonos": 2,
-    "acomodador": 2
+    "acomodador": 2,
 }
 
 
@@ -27,7 +27,7 @@ def inicializar_historial(hermanos: list[dict]) -> dict[str, dict]:
             "cabina": 0,
             "semanas_consecutivas": 0,
             "roles_mes": set(),
-            "parejas_mes": set()
+            "parejas_mes": set(),
         }
     return historial
 
@@ -35,14 +35,19 @@ def inicializar_historial(hermanos: list[dict]) -> dict[str, dict]:
 def asignar_semana(
     hermanos: list[dict],
     historial_carga: dict[str, dict],
-    asignados_semana_anterior: dict[str, str] = None
+    asignados_semana_anterior: dict[str, str] = None,
+    ausentes_esta_semana: set[str] = None,  # <-- 1. NUEVO PARÁMETRO
 ) -> dict[str, list[str]]:
     """Genera las asignaciones para una semana individual."""
     if asignados_semana_anterior is None:
         asignados_semana_anterior = {}
+    if ausentes_esta_semana is None:
+        ausentes_esta_semana = set()
 
     asignaciones_semana = {}
-    ocupados_esta_semana = set()
+    
+    # 2. Los ausentes inician como "ocupados", impidiendo su selección en cualquier puesto
+    ocupados_esta_semana = set(ausentes_esta_semana)
     roles_esta_semana = {}
 
     for puesto, cantidad in PUESTOS_REQUERIDOS.items():
@@ -57,6 +62,7 @@ def asignar_semana(
             candidatos_auxilio = [
                 h for h in capacitados
                 if roles_esta_semana.get(h["nombre"]) in puestos_compatibles
+                and h["nombre"] not in ausentes_esta_semana  # Garantizar que nunca auxilie un ausente
             ]
             disponibles.extend(candidatos_auxilio)
 
@@ -131,10 +137,10 @@ def asignar_semana(
                 if otro_nombre != nombre:
                     historial_carga[nombre]["parejas_mes"].add(otro_nombre)
 
-    # Actualizar contador de semanas consecutivas para todos los hermanos
+    # Actualizar contador de semanas consecutivas solo para quienes tuvieron asignación real
     for h in hermanos:
         nombre = h["nombre"]
-        if nombre in ocupados_esta_semana:
+        if nombre in roles_esta_semana:
             historial_carga[nombre]["semanas_consecutivas"] += 1
         else:
             historial_carga[nombre]["semanas_consecutivas"] = 0
@@ -142,14 +148,33 @@ def asignar_semana(
     return asignaciones_semana
 
 
-def generar_mes(hermanos: list[dict], num_semanas: int = 4) -> dict[int, dict]:
-    """Genera las asignaciones para la cantidad de semanas especificadas (4 o 5)."""
+def generar_mes(
+    hermanos: list[dict],
+    num_semanas: int,
+    ausencias: dict[int, list[str]] | None = None,
+) -> dict[int, dict]:
+    """
+    Genera las asignaciones mensuales respetando la rotación equitativa.
+    
+    :param ausencias: Diccionario {semana_int: [lista_nombres_no_disponibles]}
+                      Ejemplo: {1: ["Santiago Silva"], 2: ["Santiago Silva", "Josué Briones"]}
+    """
+    if ausencias is None:
+        ausencias = {}
+
     historial_carga = inicializar_historial(hermanos)
     mes_completo = {}
     asignados_previa = {}
 
     for semana in range(1, num_semanas + 1):
-        semana_actual = asignar_semana(hermanos, historial_carga, asignados_previa)
+        # 3. Extraer los ausentes de esta semana y enviarlos al asignador
+        ausentes_esta_semana = set(ausencias.get(semana, []))
+        semana_actual = asignar_semana(
+            hermanos, 
+            historial_carga, 
+            asignados_previa, 
+            ausentes_esta_semana=ausentes_esta_semana
+        )
         mes_completo[semana] = semana_actual
 
         asignados_previa = {}
@@ -164,7 +189,10 @@ if __name__ == "__main__":
     from cargador_datos import cargar_hermanos
 
     hermanos = cargar_hermanos("data/hermanos.json")
-    mes = generar_mes(hermanos, num_semanas=4)
+    
+    # Prueba rápida simulando ausencia del hermano en la semana 1
+    ausencias_prueba = {1: ["Santiago Silva"]}
+    mes = generar_mes(hermanos, num_semanas=4, ausencias=ausencias_prueba)
 
     for semana, asignaciones in mes.items():
         print(f"\n=== SEMANA {semana} ===")
