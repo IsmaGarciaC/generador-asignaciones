@@ -370,7 +370,7 @@ class AppAsignaciones(ctk.CTk):
         anio = int(self.combo_anio.get())
         mes_idx = MESES.index(self.combo_mes.get()) + 1
         semanas = calcular_semanas_mes(anio, mes_idx)
-        self.lbl_semanas_detectadas.configure(text=f"• {len(semanas)} semanas detectadas")
+        self.lbl_semanas_detectadas.configure(text=f"• {len(semanas)} semanas (martes a domingo)")
 
     def actualizar_conteo_ausencias(self):
         anio = int(self.combo_anio.get())
