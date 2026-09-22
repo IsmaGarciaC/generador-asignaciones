@@ -1,0 +1,50 @@
+[
+    {
+        "id": 1,
+        "nombre": "Ana Ejemplo",
+        "telefono": "+593000000001",
+        "roles": ["presidente", "lector_domingo", "acomodador"]
+    },
+    {
+        "id": 2,
+        "nombre": "Bruno Ejemplo",
+        "telefono": "+593000000002",
+        "roles": ["audio", "video", "acomodador"]
+    },
+    {
+        "id": 3,
+        "nombre": "Carla Ejemplo",
+        "telefono": "+593000000003",
+        "roles": ["audio", "video", "microfonos"]
+    },
+    {
+        "id": 4,
+        "nombre": "Diego Ejemplo",
+        "telefono": "+593000000004",
+        "roles": ["plataforma", "lector_martes", "microfonos"]
+    },
+    {
+        "id": 5,
+        "nombre": "Elena Ejemplo",
+        "telefono": "+593000000005",
+        "roles": ["lector_martes", "lector_domingo", "presidente"]
+    },
+    {
+        "id": 6,
+        "nombre": "Felipe Ejemplo",
+        "telefono": "+593000000006",
+        "roles": ["acomodador", "microfonos"]
+    },
+    {
+        "id": 7,
+        "nombre": "Gabriela Ejemplo",
+        "telefono": "+593000000007",
+        "roles": ["plataforma", "acomodador"]
+    },
+    {
+        "id": 8,
+        "nombre": "Hugo Ejemplo",
+        "telefono": "+593000000008",
+        "roles": ["microfonos", "acomodador"]
+    }
+]

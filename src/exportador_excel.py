@@ -69,7 +69,11 @@ def guardar_estado(anio: int, mes: int, ultimo_grupo: int, ruta_estado: str = "d
 
 
 def calcular_semanas_mes(anio: int, mes: int) -> list[dict]:
-    """Calcula las semanas de reunión del mes en función de los días de reunión (Martes a Domingo)."""
+    """Semanas del programa: un bloque por cada martes civil del mes, hasta el domingo (+5 días).
+
+    Si ese domingo cae en el mes siguiente, la semana sigue contando en este programa.
+    Los días del mes anteriores al primer martes no forman semana.
+    """
     num_dias = calendar.monthrange(anio, mes)[1]
     martes_mes = [
         datetime.date(anio, mes, d)

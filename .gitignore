@@ -8,7 +8,8 @@ salida/
 *.xlsx
 *.png
 
-# Archivos de estado y ausencias locales (mantienen los datos privados)
+# Datos de congregación y estado (solo en el PC; no van al remoto)
+data/hermanos.json
 data/estado.json
 data/ausencias.json
 

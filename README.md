@@ -58,3 +58,15 @@ Diseño desacoplado basado en capas para separar la interfaz de usuario, la lóg
 - **CustomTkinter:** Interfaz gráfica nativa con escalado DPI, modo oscuro y aceleración por hardware.
 
 - **JSON:** Persistencia modular de estado y perfiles sin bases de datos pesadas (Portable I/O).
+
+---
+
+## Datos locales y reglas de producto
+
+La lista real de hermanos **no se versiona**. Copia `data/hermanos.example.json` a `data/hermanos.json` y edita en el PC. Ese archivo, junto con `data/estado.json` y `data/ausencias.json`, queda fuera de git.
+
+**Semanas:** cada martes del mes abre una semana hasta el domingo (cinco días después). Si el domingo es del mes siguiente, igual entra en este programa.
+
+**Regenerar el mismo mes** no debe avanzar los grupos de limpieza; **puestos incompletos** se exportan con aviso. Esas dos reglas se implementan en la siguiente fase; el motor y el Excel aún no las aplican.
+
+No hay envío automático por WhatsApp. Los roles válidos están en `data/roles.txt` (`audio` y `video`; no `sonido`).
