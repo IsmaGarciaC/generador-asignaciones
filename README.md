@@ -13,7 +13,9 @@ Motor de satisfacción de restricciones (CSP) para la automatización y despacho
 
 El sistema opera como un despachador determinista guiado por heurísticas de costo mínimo. Para cada semana, el motor evalúa el espacio de candidatos utilizando una función de coste acumulado:
 
-$$\text{Puntos}(h) = \text{CargaBase}(h) + P_{\text{rol\_mes}} + P_{\text{previa}} + P_{\text{fatiga}} + P_{\text{pareja}} + P_{\text{doblete}}$$
+```text
+Puntos(h) = CargaBase(h) + P[rol_mes] + P[previa] + P[fatiga] + P[pareja] + P[doblete]
+```
 
 - **Balance Cero-Sesgo:** Ponderación basada en el historial del mes (`CargaBase`).
 - **Penalizaciones:** Prevención estricta de repetición de roles ($+16$), fatiga por semanas consecutivas ($+12$) y parejas duplicadas ($+14$).
