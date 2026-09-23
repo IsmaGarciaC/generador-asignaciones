@@ -15,7 +15,7 @@ from exportador_excel import (  # noqa: E402
     calcular_semanas_mes,
     exportar_programa_excel,
 )
-from modelos import EstadoMes  # noqa: E402
+from modelos import EstadoMes, ReglasAsignacion  # noqa: E402
 from motor_asignacion import MotorAsignacion  # noqa: E402
 from repositorio import DatosInvalidosError, Repositorio  # noqa: E402
 
@@ -37,15 +37,11 @@ MESES = [
     "Diciembre",
 ]
 
+_reglas = ReglasAsignacion()
 ETIQUETAS_PUESTO = {
-    "presidente": "Presidente",
-    "lector_domingo": "Lector de La Atalaya",
-    "audio": "Audio",
-    "video": "Video",
-    "plataforma": "Plataforma",
-    "lector_martes": "Lector Estudio Bíblico",
-    "microfonos": "Micrófonos",
-    "acomodador": "Acomodadores",
+    item["key"]: item["label"]
+    for item in _reglas.estructura_programa
+    if not item["es_seccion"] and item["key"] not in ("limpieza", "hospitalidad")
 }
 
 
@@ -308,7 +304,7 @@ class AppAsignaciones(ctk.CTk):
         siguiente_sugerido = self._grupo_sugerido_para_mes(anio_defecto, mes_defecto)
         self.combo_grupo = ctk.CTkOptionMenu(
             frame_config,
-            values=["Grupo # 1", "Grupo # 2", "Grupo # 3", "Grupo # 4"],
+            values=[f"Grupo # {i}" for i in range(1, _reglas.num_grupos_limpieza + 1)],
             width=130,
         )
         self.combo_grupo.set(f"Grupo # {siguiente_sugerido}")
@@ -398,7 +394,7 @@ class AppAsignaciones(ctk.CTk):
         if estado.ultimo_anio == anio and estado.ultimo_mes == mes:
             ultimo = estado.ultimo_grupo_limpieza
             num_semanas = len(calcular_semanas_mes(anio, mes))
-            return ((ultimo - 1 - (num_semanas - 1)) % 4) + 1
+            return ((ultimo - 1 - (num_semanas - 1)) % _reglas.num_grupos_limpieza) + 1
 
         return estado.siguiente_grupo_limpieza
 
@@ -482,8 +478,10 @@ class AppAsignaciones(ctk.CTk):
             )
 
             # Actualizar estado para el mes siguiente
-            ultimo_grupo = ((grupo_seleccionado - 1 + (len(semanas) - 1)) % 4) + 1
-            siguiente_grupo = (ultimo_grupo % 4) + 1
+            ultimo_grupo = (
+                (grupo_seleccionado - 1 + (len(semanas) - 1)) % _reglas.num_grupos_limpieza
+            ) + 1
+            siguiente_grupo = (ultimo_grupo % _reglas.num_grupos_limpieza) + 1
 
             nuevo_estado = EstadoMes(
                 ultimo_anio=anio,
