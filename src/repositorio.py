@@ -1,20 +1,24 @@
 import json
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+from typing import Dict, List, Optional, Set
+
 from pydantic import ValidationError
 
 from configuracion import BASE_DIR, logger
-from modelos import Hermano, EstadoMes
+from modelos import EstadoMes, Hermano
+
 
 class DatosInvalidosError(ValueError):
     """Excepción lanzada cuando hay un error semántico o de formato en los datos."""
+
     pass
+
 
 class Repositorio:
     def __init__(self, data_dir: Path = None):
         self.data_dir = data_dir or (BASE_DIR / "data")
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.ruta_hermanos = self.data_dir / "hermanos.json"
         self.ruta_roles = self.data_dir / "roles.txt"
         self.ruta_estado = self.data_dir / "estado.json"
@@ -22,62 +26,74 @@ class Repositorio:
 
     def cargar_roles_validos(self) -> Set[str]:
         if not self.ruta_roles.exists():
-            logger.error(f"No se encontró el catálogo de roles: {self.ruta_roles}")
-            raise DatosInvalidosError(f"No se encontró el catálogo de roles: {self.ruta_roles.name}")
-        
+            logger.error("No se encontró el catálogo de roles: %s", self.ruta_roles)
+            raise DatosInvalidosError(
+                f"No se encontró el catálogo de roles: {self.ruta_roles.name}"
+            )
+
         roles = set()
         for linea in self.ruta_roles.read_text(encoding="utf-8").splitlines():
             token = linea.strip()
             if token and all(c.islower() or c == "_" for c in token):
                 roles.add(token)
-                
+
         if not roles:
             raise DatosInvalidosError("El catálogo de roles está vacío.")
         return roles
 
     def cargar_hermanos(self) -> List[Hermano]:
         if not self.ruta_hermanos.exists():
-            raise DatosInvalidosError(f"No se encontró {self.ruta_hermanos.name}. Copia hermanos.example.json a hermanos.json.")
-        
+            raise DatosInvalidosError(
+                f"No se encontró {self.ruta_hermanos.name}. "
+                "Copia hermanos.example.json a hermanos.json."
+            )
+
         try:
             datos_raw = json.loads(self.ruta_hermanos.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
-            logger.error(f"Error decodificando hermanos.json: {e}")
+            logger.error("Error decodificando hermanos.json: %s", e)
             raise DatosInvalidosError(f"hermanos.json no es un JSON válido: {e.msg}") from e
-            
+
         if not isinstance(datos_raw, list):
             raise DatosInvalidosError("hermanos.json debe ser una lista de personas.")
-            
+
         roles_validos = self.cargar_roles_validos()
-        
+
         hermanos = []
         ids_vistos = set()
         nombres_vistos = set()
-        
+
         for idx, item in enumerate(datos_raw):
             try:
                 hermano = Hermano(**item)
             except ValidationError as e:
-                logger.error(f"Error de validación Pydantic en persona #{idx+1}: {e}")
-                raise DatosInvalidosError(f"Persona #{idx+1}: Error de formato. Revisa los campos requeridos.") from e
-                
+                logger.error("Error de validación Pydantic en persona #%d: %s", idx + 1, e)
+                raise DatosInvalidosError(
+                    f"Persona #{idx+1}: Error de formato. Revisa los campos requeridos."
+                ) from e
+
             if hermano.id in ids_vistos:
                 raise DatosInvalidosError(f"Persona #{idx+1}: el id {hermano.id} está duplicado.")
             ids_vistos.add(hermano.id)
-            
+
             if hermano.nombre in nombres_vistos:
-                raise DatosInvalidosError(f"Persona #{idx+1}: el nombre '{hermano.nombre}' está duplicado.")
+                raise DatosInvalidosError(
+                    f"Persona #{idx+1}: el nombre '{hermano.nombre}' está duplicado."
+                )
             nombres_vistos.add(hermano.nombre)
-            
+
             for rol in hermano.roles:
                 if rol not in roles_validos:
-                    raise DatosInvalidosError(f"{hermano.nombre}: rol desconocido '{rol}'. Válidos: {', '.join(sorted(roles_validos))}.")
-                    
+                    lista_roles = ", ".join(sorted(roles_validos))
+                    raise DatosInvalidosError(
+                        f"{hermano.nombre}: rol desconocido '{rol}'. Válidos: {lista_roles}."
+                    )
+
             hermanos.append(hermano)
-            
+
         if not hermanos:
             raise DatosInvalidosError("hermanos.json no contiene ninguna persona.")
-            
+
         return hermanos
 
     def leer_estado(self) -> Optional[EstadoMes]:
@@ -87,14 +103,14 @@ class Repositorio:
             datos = json.loads(self.ruta_estado.read_text(encoding="utf-8"))
             return EstadoMes(**datos)
         except (OSError, json.JSONDecodeError, ValidationError) as e:
-            logger.warning(f"No se pudo leer o validar el estado anterior: {e}")
+            logger.warning("No se pudo leer o validar el estado anterior: %s", e)
             return None
 
     def guardar_estado(self, estado: EstadoMes):
         try:
             self.ruta_estado.write_text(estado.model_dump_json(indent=4), encoding="utf-8")
         except OSError as e:
-            logger.error(f"Error guardando estado: {e}")
+            logger.error("Error guardando estado: %s", e)
 
     def leer_todas_ausencias(self) -> Dict[str, Dict[str, List[int]]]:
         if not self.ruta_ausencias.exists():
@@ -103,14 +119,15 @@ class Repositorio:
             datos = json.loads(self.ruta_ausencias.read_text(encoding="utf-8"))
             return datos if isinstance(datos, dict) else {}
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"No se pudo leer las ausencias: {e}")
+            logger.warning("No se pudo leer las ausencias: %s", e)
             return {}
 
     def guardar_todas_ausencias(self, ausencias: Dict[str, Dict[str, List[int]]]):
         try:
-            self.ruta_ausencias.write_text(json.dumps(ausencias, indent=4, ensure_ascii=False), encoding="utf-8")
+            contenido = json.dumps(ausencias, indent=4, ensure_ascii=False)
+            self.ruta_ausencias.write_text(contenido, encoding="utf-8")
         except OSError as e:
-            logger.error(f"Error guardando ausencias: {e}")
+            logger.error("Error guardando ausencias: %s", e)
 
     def leer_ausencias_mes(self, anio: int, mes: int) -> Dict[str, List[int]]:
         clave = f"{anio}-{mes:02d}"
