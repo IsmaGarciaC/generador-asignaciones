@@ -4,22 +4,22 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Hermano(BaseModel):
-    id: int
+    id: int = Field(..., ge=1)
     nombre: str = Field(..., min_length=1)
     telefono: str = ""
-    roles: List[str] = Field(..., min_length=1)
+    roles: Set[str] = Field(..., min_length=1)
 
-    @field_validator("nombre")
+    @field_validator("nombre", mode="before")
     @classmethod
     def strip_nombre(cls, v: str) -> str:
-        return v.strip()
+        return v.strip() if isinstance(v, str) else v
 
 
 class EstadoMes(BaseModel):
-    ultimo_anio: int
-    ultimo_mes: int
-    ultimo_grupo_limpieza: int
-    siguiente_grupo_limpieza: int
+    ultimo_anio: int = Field(..., ge=2000)
+    ultimo_mes: int = Field(..., ge=1, le=12)
+    ultimo_grupo_limpieza: int = Field(..., ge=0)
+    siguiente_grupo_limpieza: int = Field(..., ge=0)
 
 
 class AusenciasMes(BaseModel):
@@ -30,13 +30,13 @@ class AusenciasMes(BaseModel):
 class ReglasAsignacion(BaseModel):
     """Reglas y penalizaciones configurables para el motor heurístico."""
 
-    penalizacion_rol_repetido_mes: int = 16
-    penalizacion_semana_anterior: int = 3
-    penalizacion_mismo_rol_semana_anterior: int = 10
-    penalizacion_fatiga: int = 12
-    penalizacion_pareja_repetida: int = 14
-    penalizacion_doblete_emergencia: int = 35
-    limite_semanas_fatiga: int = 2
+    penalizacion_rol_repetido_mes: int = Field(16, ge=0)
+    penalizacion_semana_anterior: int = Field(3, ge=0)
+    penalizacion_mismo_rol_semana_anterior: int = Field(10, ge=0)
+    penalizacion_fatiga: int = Field(12, ge=0)
+    penalizacion_pareja_repetida: int = Field(14, ge=0)
+    penalizacion_doblete_emergencia: int = Field(35, ge=0)
+    limite_semanas_fatiga: int = Field(2, ge=1)
     puestos_requeridos: Dict[str, int] = Field(
         default_factory=lambda: {
             "presidente": 1,
