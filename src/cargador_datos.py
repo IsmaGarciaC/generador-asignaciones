@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import Dict, List, Set
 
-from repositorio import Repositorio, DatosInvalidosError
 from configuracion import BASE_DIR
+from repositorio import DatosInvalidosError, Repositorio
 
-# Mantenemos las firmas originales para retrocompatibilidad 
+# Mantenemos las firmas originales para retrocompatibilidad
 # con los módulos que aún no han sido refactorizados.
 
 def cargar_roles_validos(ruta_roles: str | Path) -> Set[str]:
@@ -18,7 +18,7 @@ def cargar_hermanos(ruta_archivo: str | Path) -> List[Dict]:
     """
     repo = Repositorio(data_dir=Path(ruta_archivo).parent)
     hermanos_pydantic = repo.cargar_hermanos()
-    
+
     # Exportamos a dict para que el motor viejo no se rompa
     return [h.model_dump() for h in hermanos_pydantic]
 

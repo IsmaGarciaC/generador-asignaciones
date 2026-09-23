@@ -1,216 +1,320 @@
 import random
+from typing import Dict, List, Optional, Set, Union
 
-# Orden de puestos: de los más restrictivos/técnicos a los más generales
-PUESTOS_REQUERIDOS = {
-    "presidente": 1,
-    "lector_domingo": 1,
-    "audio": 1,
-    "video": 1,
-    "plataforma": 1,
-    "lector_martes": 1,
-    "microfonos": 2,
-    "acomodador": 2,
-}
+from configuracion import logger
+from modelos import Hermano, ReglasAsignacion
+
+# Mantenemos PUESTOS_REQUERIDOS a nivel de módulo para retrocompatibilidad
+PUESTOS_REQUERIDOS = ReglasAsignacion().puestos_requeridos
+
+
+class MotorAsignacion:
+    """
+    Motor heurístico de satisfacción de restricciones y balance de carga
+    para la asignación mensual de puestos en la congregación.
+    """
+
+    def __init__(
+        self,
+        hermanos: List[Union[Hermano, dict]],
+        reglas: Optional[ReglasAsignacion] = None,
+        seed: Optional[int] = None,
+    ):
+        self.reglas = reglas or ReglasAsignacion()
+        self.rng = random.Random(seed)
+
+        # Normalizar hermanos a objetos Hermano
+        self.hermanos: List[Hermano] = [
+            h if isinstance(h, Hermano) else Hermano(**h) for h in hermanos
+        ]
+
+        self.historial_carga: Dict[str, dict] = self._inicializar_historial()
+
+    def _inicializar_historial(self) -> Dict[str, dict]:
+        """Inicializa contadores de equidad, roles previos, parejas y rachas de trabajo."""
+        historial = {}
+        for h in self.hermanos:
+            historial[h.nombre] = {
+                "global": 0,
+                "cabina": 0,
+                "semanas_consecutivas": 0,
+                "roles_mes": set(),
+                "parejas_mes": set(),
+            }
+        return historial
+
+    def reiniciar_historial(self):
+        """Reinicia el historial de carga acumulado."""
+        self.historial_carga = self._inicializar_historial()
+
+    def filtrar_por_rol(self, rol: str) -> List[Hermano]:
+        """Retorna los hermanos capacitados para un rol específico."""
+        return [h for h in self.hermanos if rol in h.roles]
+
+    def _calcular_costo_candidato(
+        self,
+        hermano: Hermano,
+        puesto: str,
+        seleccionados: List[Hermano],
+        asignados_semana_anterior: Dict[str, str],
+        ocupados_esta_semana: Set[str],
+        es_caso_emergencia: bool,
+    ) -> int:
+        """Calcula el coste acumulado de asignar a un hermano a un puesto."""
+        nombre = hermano.nombre
+        registro = self.historial_carga[nombre]
+
+        # Base de carga según el tipo de labor
+        if puesto in ["audio", "video"]:
+            puntos = registro["cabina"]
+        else:
+            puntos = registro["global"]
+
+        # 1. Penalización si ya hizo este rol específico en el mes
+        if puesto in registro["roles_mes"]:
+            puntos += self.reglas.penalizacion_rol_repetido_mes
+
+        # 2. Penalización por servicio en la semana anterior
+        if nombre in asignados_semana_anterior:
+            puntos += self.reglas.penalizacion_semana_anterior
+            if asignados_semana_anterior[nombre] == puesto:
+                puntos += self.reglas.penalizacion_mismo_rol_semana_anterior
+
+        # 3. Penalización por fatiga (semanas seguidas trabajando)
+        if registro["semanas_consecutivas"] >= self.reglas.limite_semanas_fatiga:
+            puntos += self.reglas.penalizacion_fatiga
+
+        # 4. Penalización por pareja repetida en el mes
+        if seleccionados:
+            companero_actual = seleccionados[0].nombre
+            if companero_actual in registro["parejas_mes"]:
+                puntos += self.reglas.penalizacion_pareja_repetida
+
+        # 5. Doblete en la misma semana (solo emergencia)
+        if es_caso_emergencia and nombre in ocupados_esta_semana:
+            puntos += self.reglas.penalizacion_doblete_emergencia
+
+        return puntos
+
+    def asignar_semana(
+        self,
+        semana_idx: int = 1,
+        asignados_semana_anterior: Optional[Dict[str, str]] = None,
+        ausentes_esta_semana: Optional[Set[str]] = None,
+    ) -> Dict[str, List[str]]:
+        """Genera las asignaciones para una semana individual."""
+        if asignados_semana_anterior is None:
+            asignados_semana_anterior = {}
+        if ausentes_esta_semana is None:
+            ausentes_esta_semana = set()
+
+        asignaciones_semana: Dict[str, List[str]] = {}
+        ocupados_esta_semana = set(ausentes_esta_semana)
+        roles_esta_semana: Dict[str, str] = {}
+
+        for puesto, cantidad in self.reglas.puestos_requeridos.items():
+            capacitados = self.filtrar_por_rol(puesto)
+            disponibles = [h for h in capacitados if h.nombre not in ocupados_esta_semana]
+
+            # Válvula de escape para lector_martes si faltan disponibles
+            es_caso_emergencia = False
+            if puesto == "lector_martes" and len(disponibles) < cantidad:
+                es_caso_emergencia = True
+                logger.warning(
+                    "Semana %d: Válvula de emergencia activada para 'lector_martes'. "
+                    "Buscando candidatos de auxilio.",
+                    semana_idx,
+                )
+                candidatos_auxilio = [
+                    h
+                    for h in capacitados
+                    if roles_esta_semana.get(h.nombre) in self.reglas.puestos_emergencia_compatibles
+                    and h.nombre not in ausentes_esta_semana
+                ]
+                disponibles.extend(candidatos_auxilio)
+
+            # Barajado aleatorio para desempates deterministas/estocásticos
+            self.rng.shuffle(disponibles)
+            seleccionados: List[Hermano] = []
+
+            for _ in range(cantidad):
+                candidatos_ronda = [
+                    h
+                    for h in disponibles
+                    if h.nombre not in [s.nombre for s in seleccionados]
+                ]
+
+                if not candidatos_ronda:
+                    break
+
+                candidatos_ronda.sort(
+                    key=lambda h: self._calcular_costo_candidato(
+                        h,
+                        puesto,
+                        seleccionados,
+                        asignados_semana_anterior,
+                        ocupados_esta_semana,
+                        es_caso_emergencia,
+                    )
+                )
+                seleccionados.append(candidatos_ronda[0])
+
+            if len(seleccionados) < cantidad:
+                logger.warning(
+                    "Semana %d: No se pudo completar el puesto '%s' (%d de %d asignados).",
+                    semana_idx,
+                    puesto,
+                    len(seleccionados),
+                    cantidad,
+                )
+
+            asignaciones_semana[puesto] = [h.nombre for h in seleccionados]
+
+            # Actualizar estado de los elegidos
+            nombres_elegidos = [h.nombre for h in seleccionados]
+            for h in seleccionados:
+                nombre = h.nombre
+                ocupados_esta_semana.add(nombre)
+                roles_esta_semana[nombre] = puesto
+
+                self.historial_carga[nombre]["global"] += 1
+                self.historial_carga[nombre]["roles_mes"].add(puesto)
+
+                if puesto in ["audio", "video"]:
+                    self.historial_carga[nombre]["cabina"] += 1
+
+                for otro_nombre in nombres_elegidos:
+                    if otro_nombre != nombre:
+                        self.historial_carga[nombre]["parejas_mes"].add(otro_nombre)
+
+        # Actualizar contador de semanas consecutivas
+        for h in self.hermanos:
+            nombre = h.nombre
+            if nombre in roles_esta_semana:
+                self.historial_carga[nombre]["semanas_consecutivas"] += 1
+            else:
+                self.historial_carga[nombre]["semanas_consecutivas"] = 0
+
+        return asignaciones_semana
+
+    def generar_mes(
+        self,
+        num_semanas: int,
+        ausencias: Optional[Dict[int, List[str]]] = None,
+    ) -> Dict[int, Dict[str, List[str]]]:
+        """Genera las asignaciones mensuales respetando la rotación equitativa."""
+        if ausencias is None:
+            ausencias = {}
+
+        logger.info(
+            "Iniciando generación mensual para %d semanas con %d personas registradas.",
+            num_semanas,
+            len(self.hermanos),
+        )
+
+        mes_completo = {}
+        asignados_previa: Dict[str, str] = {}
+
+        for semana in range(1, num_semanas + 1):
+            ausentes_esta_semana = set(ausencias.get(semana, []))
+            semana_actual = self.asignar_semana(
+                semana_idx=semana,
+                asignados_semana_anterior=asignados_previa,
+                ausentes_esta_semana=ausentes_esta_semana,
+            )
+            mes_completo[semana] = semana_actual
+
+            # Guardar roles para penalizar repetición inmediata en la siguiente semana
+            asignados_previa = {}
+            for puesto, lista_hermanos in semana_actual.items():
+                for nombre in lista_hermanos:
+                    asignados_previa[nombre] = puesto
+
+        logger.info("Generación de asignaciones completada.")
+        return mes_completo
+
+    def listar_puestos_incompletos(
+        self, mes_asignaciones: Dict[int, Dict[str, List[str]]]
+    ) -> List[dict]:
+        """Detecta puestos con menos personas que los requeridos en alguna semana."""
+        huecos = []
+        for semana, asignaciones in sorted(mes_asignaciones.items()):
+            for puesto, cantidad in self.reglas.puestos_requeridos.items():
+                nombres = asignaciones.get(puesto, [])
+                if len(nombres) < cantidad:
+                    huecos.append(
+                        {
+                            "semana": semana,
+                            "puesto": puesto,
+                            "asignados": len(nombres),
+                            "requeridos": cantidad,
+                        }
+                    )
+        return huecos
+
+
+# =====================================================================
+# Funciones helper para retrocompatibilidad con módulos existentes
+# =====================================================================
 
 
 def listar_puestos_incompletos(mes_asignaciones: dict[int, dict]) -> list[dict]:
     """Puestos con menos personas que PUESTOS_REQUERIDOS en alguna semana."""
-    huecos = []
-    for semana, asignaciones in sorted(mes_asignaciones.items()):
-        for puesto, cantidad in PUESTOS_REQUERIDOS.items():
-            nombres = asignaciones.get(puesto, [])
-            if len(nombres) < cantidad:
-                huecos.append({
-                    "semana": semana,
-                    "puesto": puesto,
-                    "asignados": len(nombres),
-                    "requeridos": cantidad,
-                })
-    return huecos
+    motor = MotorAsignacion(hermanos=[])
+    return motor.listar_puestos_incompletos(mes_asignaciones)
 
 
 def filtrar_por_rol(hermanos: list[dict], rol: str) -> list[dict]:
     """Retorna los hermanos capacitados para un rol específico."""
-    return [h for h in hermanos if rol in h["roles"]]
+    motor = MotorAsignacion(hermanos=hermanos)
+    return [h.model_dump() for h in motor.filtrar_por_rol(rol)]
 
 
 def inicializar_historial(hermanos: list[dict]) -> dict[str, dict]:
     """Inicializa contadores de equidad, roles previos, parejas y rachas de trabajo."""
-    historial = {}
-    for h in hermanos:
-        historial[h["nombre"]] = {
-            "global": 0,
-            "cabina": 0,
-            "semanas_consecutivas": 0,
-            "roles_mes": set(),
-            "parejas_mes": set(),
-        }
-    return historial
+    motor = MotorAsignacion(hermanos=hermanos)
+    return motor.historial_carga
 
 
 def asignar_semana(
     hermanos: list[dict],
     historial_carga: dict[str, dict],
     asignados_semana_anterior: dict[str, str] = None,
-    ausentes_esta_semana: set[str] = None,  # <-- 1. NUEVO PARÁMETRO
+    ausentes_esta_semana: set[str] = None,
 ) -> dict[str, list[str]]:
-    """Genera las asignaciones para una semana individual."""
-    if asignados_semana_anterior is None:
-        asignados_semana_anterior = {}
-    if ausentes_esta_semana is None:
-        ausentes_esta_semana = set()
-
-    asignaciones_semana = {}
-    
-    # 2. Los ausentes inician como "ocupados", impidiendo su selección en cualquier puesto
-    ocupados_esta_semana = set(ausentes_esta_semana)
-    roles_esta_semana = {}
-
-    for puesto, cantidad in PUESTOS_REQUERIDOS.items():
-        capacitados = filtrar_por_rol(hermanos, puesto)
-        disponibles = [h for h in capacitados if h["nombre"] not in ocupados_esta_semana]
-
-        # Válvula de escape exclusiva para lector_martes si falta personal disponible
-        es_caso_emergencia = False
-        if puesto == "lector_martes" and len(disponibles) < cantidad:
-            es_caso_emergencia = True
-            puestos_compatibles = {"microfonos", "audio", "video"}
-            candidatos_auxilio = [
-                h for h in capacitados
-                if roles_esta_semana.get(h["nombre"]) in puestos_compatibles
-                and h["nombre"] not in ausentes_esta_semana  # Garantizar que nunca auxilie un ausente
-            ]
-            disponibles.extend(candidatos_auxilio)
-
-        random.shuffle(disponibles)
-        seleccionados = []
-
-        # Selección iterativa para evaluar compatibilidad de compañeros en puestos múltiples
-        for _ in range(cantidad):
-            candidatos_ronda = [
-                h for h in disponibles
-                if h["nombre"] not in [s["nombre"] for s in seleccionados]
-            ]
-
-            if not candidatos_ronda:
-                break
-
-            def calcular_prioridad(hermano):
-                nombre = hermano["nombre"]
-                registro = historial_carga[nombre]
-
-                # Base de carga según el tipo de labor
-                if puesto in ["audio", "video"]:
-                    puntos = registro["cabina"]
-                else:
-                    puntos = registro["global"]
-
-                # 1. Penalización si ya hizo este rol específico en el mes
-                if puesto in registro["roles_mes"]:
-                    puntos += 16
-
-                # 2. Penalización por servicio en la semana anterior
-                if nombre in asignados_semana_anterior:
-                    puntos += 3
-                    if asignados_semana_anterior[nombre] == puesto:
-                        puntos += 10
-
-                # 3. Penalización por fatiga (2 o más semanas seguidas trabajando)
-                if registro["semanas_consecutivas"] >= 2:
-                    puntos += 12
-
-                # 4. Penalización por pareja repetida en el mes
-                if seleccionados:
-                    companero_actual = seleccionados[0]["nombre"]
-                    if companero_actual in registro["parejas_mes"]:
-                        puntos += 14
-
-                # 5. Doblete en la misma semana (solo emergencia)
-                if es_caso_emergencia and nombre in ocupados_esta_semana:
-                    puntos += 35
-
-                return puntos
-
-            candidatos_ronda.sort(key=calcular_prioridad)
-            seleccionados.append(candidatos_ronda[0])
-
-        asignaciones_semana[puesto] = [h["nombre"] for h in seleccionados]
-
-        # Actualizar datos de los seleccionados en este puesto
-        nombres_elegidos = [h["nombre"] for h in seleccionados]
-        for h in seleccionados:
-            nombre = h["nombre"]
-            ocupados_esta_semana.add(nombre)
-            roles_esta_semana[nombre] = puesto
-
-            historial_carga[nombre]["global"] += 1
-            historial_carga[nombre]["roles_mes"].add(puesto)
-
-            if puesto in ["audio", "video"]:
-                historial_carga[nombre]["cabina"] += 1
-
-            for otro_nombre in nombres_elegidos:
-                if otro_nombre != nombre:
-                    historial_carga[nombre]["parejas_mes"].add(otro_nombre)
-
-    # Actualizar contador de semanas consecutivas solo para quienes tuvieron asignación real
-    for h in hermanos:
-        nombre = h["nombre"]
-        if nombre in roles_esta_semana:
-            historial_carga[nombre]["semanas_consecutivas"] += 1
-        else:
-            historial_carga[nombre]["semanas_consecutivas"] = 0
-
-    return asignaciones_semana
+    """Función de compatibilidad para asignación de una semana."""
+    motor = MotorAsignacion(hermanos=hermanos)
+    motor.historial_carga = historial_carga
+    return motor.asignar_semana(
+        semana_idx=1,
+        asignados_semana_anterior=asignados_semana_anterior,
+        ausentes_esta_semana=ausentes_esta_semana,
+    )
 
 
 def generar_mes(
     hermanos: list[dict],
     num_semanas: int,
     ausencias: dict[int, list[str]] | None = None,
+    seed: Optional[int] = None,
 ) -> dict[int, dict]:
-    """
-    Genera las asignaciones mensuales respetando la rotación equitativa.
-    
-    :param ausencias: Diccionario {semana_int: [lista_nombres_no_disponibles]}
-                      Ejemplo: {1: ["Santiago Silva"], 2: ["Santiago Silva", "Josué Briones"]}
-    """
-    if ausencias is None:
-        ausencias = {}
-
-    historial_carga = inicializar_historial(hermanos)
-    mes_completo = {}
-    asignados_previa = {}
-
-    for semana in range(1, num_semanas + 1):
-        # 3. Extraer los ausentes de esta semana y enviarlos al asignador
-        ausentes_esta_semana = set(ausencias.get(semana, []))
-        semana_actual = asignar_semana(
-            hermanos, 
-            historial_carga, 
-            asignados_previa, 
-            ausentes_esta_semana=ausentes_esta_semana
-        )
-        mes_completo[semana] = semana_actual
-
-        asignados_previa = {}
-        for puesto, lista_hermanos in semana_actual.items():
-            for nombre in lista_hermanos:
-                asignados_previa[nombre] = puesto
-
-    return mes_completo
+    """Genera las asignaciones mensuales respetando la rotación equitativa."""
+    motor = MotorAsignacion(hermanos=hermanos, seed=seed)
+    return motor.generar_mes(num_semanas=num_semanas, ausencias=ausencias)
 
 
 if __name__ == "__main__":
     from cargador_datos import cargar_hermanos
 
-    hermanos = cargar_hermanos("data/hermanos.json")
-    
-    # Prueba rápida simulando ausencia del hermano en la semana 1
-    ausencias_prueba = {1: ["Santiago Silva"]}
-    mes = generar_mes(hermanos, num_semanas=4, ausencias=ausencias_prueba)
+    try:
+        hermanos_raw = cargar_hermanos("data/hermanos.json")
+    except Exception:
+        hermanos_raw = cargar_hermanos("data/hermanos.example.json")
 
-    for semana, asignaciones in mes.items():
-        print(f"\n=== SEMANA {semana} ===")
-        for puesto, asignados in asignaciones.items():
-            print(f"  {puesto:15}: {asignados}")
+    motor = MotorAsignacion(hermanos=hermanos_raw, seed=42)
+    mes = motor.generar_mes(num_semanas=4, ausencias={1: ["Santiago Silva"]})
+
+    for sem, asig in mes.items():
+        print(f"\n=== SEMANA {sem} ===")
+        for p, asignados in asig.items():
+            print(f"  {p:15}: {asignados}")
