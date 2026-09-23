@@ -164,3 +164,31 @@ class Repositorio:
         elif clave in todas:
             del todas[clave]
         self.guardar_todas_ausencias(todas)
+
+    def _ruta_asignaciones(self, anio: int, mes: int) -> Path:
+        return self.data_dir / f"asignaciones_{anio}_{mes:02d}.json"
+
+    def guardar_asignaciones_mes(
+        self, anio: int, mes: int, asignaciones: Dict[int, Dict[str, List[str]]]
+    ):
+        ruta = self._ruta_asignaciones(anio, mes)
+        try:
+            ruta_tmp = ruta.with_suffix(".tmp")
+            ruta_tmp.write_text(
+                json.dumps(asignaciones, indent=4, ensure_ascii=False), encoding="utf-8"
+            )
+            os.replace(ruta_tmp, ruta)
+        except OSError as e:
+            logger.error("Error guardando asignaciones: %s", e)
+
+    def leer_asignaciones_mes(
+        self, anio: int, mes: int
+    ) -> Optional[Dict[int, Dict[str, List[str]]]]:
+        ruta = self._ruta_asignaciones(anio, mes)
+        if not ruta.exists():
+            return None
+        try:
+            datos_str = json.loads(ruta.read_text(encoding="utf-8"))
+            return {int(k): v for k, v in datos_str.items()}
+        except (OSError, json.JSONDecodeError, ValueError):
+            return None

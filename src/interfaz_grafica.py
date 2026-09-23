@@ -216,6 +216,119 @@ class VentanaAusencias(ctk.CTkToplevel):
         self.txt_lista.insert("1.0", "\n".join(lineas))
 
 
+class VentanaRecordatorios(ctk.CTkToplevel):
+    def __init__(
+        self, parent, repo: Repositorio, anio: int, mes: int, semanas: list, asignaciones: dict
+    ):
+        super().__init__(parent)
+        self.title(f"Recordatorios - Mes {mes}/{anio}")
+        self.geometry("650x550")
+        self.grab_set()
+
+        self.repo = repo
+        self.asignaciones = asignaciones
+
+        # Mapeo rápido de nombre a teléfono
+        self.telefonos = {h.nombre: h.telefono for h in repo.cargar_hermanos()}
+
+        lbl_tit = ctk.CTkLabel(
+            self, text="Envío Semiautomático (WhatsApp)", font=ctk.CTkFont(size=18, weight="bold")
+        )
+        lbl_tit.pack(pady=(15, 5))
+
+        lbl_info = ctk.CTkLabel(
+            self,
+            text=(
+                "Selecciona una semana. Abre tu WhatsApp Web o de Escritorio "
+                "y haz clic en 'Enviar' para cada hermano. El mensaje ya estará escrito."
+            ),
+            text_color="gray",
+            wraplength=550,
+        )
+        lbl_info.pack(pady=(0, 15))
+
+        # Selector de Semana
+        frame_sem = ctk.CTkFrame(self, fg_color="transparent")
+        frame_sem.pack(pady=5)
+
+        ctk.CTkLabel(frame_sem, text="Semana:", font=ctk.CTkFont(weight="bold")).pack(
+            side="left", padx=5
+        )
+        self.combo_semana = ctk.CTkOptionMenu(
+            frame_sem,
+            values=[f"Semana {i + 1} - {semanas[i]['fecha_semana']}" for i in range(len(semanas))],
+            command=self._al_cambiar_semana,
+        )
+        self.combo_semana.pack(side="left", padx=5)
+
+        self.frame_lista = ctk.CTkScrollableFrame(self)
+        self.frame_lista.pack(fill="both", expand=True, padx=20, pady=15)
+
+        if self.asignaciones:
+            self._al_cambiar_semana(self.combo_semana.get())
+        else:
+            ctk.CTkLabel(
+                self.frame_lista,
+                text="No hay asignaciones guardadas para este mes. Genera el programa primero.",
+            ).pack(pady=20)
+
+    def _al_cambiar_semana(self, sel: str):
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
+
+        if not self.asignaciones:
+            return
+
+        idx = int(sel.split(" ")[1])
+        asigs_semana = self.asignaciones.get(idx, {})
+
+        # Crear lista
+        for rol, nombres in asigs_semana.items():
+            if rol in ("limpieza", "hospitalidad"):
+                continue
+
+            rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
+
+            for nombre in nombres:
+                f_item = ctk.CTkFrame(self.frame_lista)
+                f_item.pack(fill="x", pady=2, padx=5)
+
+                telf = self.telefonos.get(nombre, "")
+
+                lbl_n = ctk.CTkLabel(
+                    f_item, text=nombre, font=ctk.CTkFont(weight="bold"), width=150, anchor="w"
+                )
+                lbl_n.pack(side="left", padx=10, pady=5)
+
+                lbl_r = ctk.CTkLabel(f_item, text=rol_etiqueta, width=150, anchor="w")
+                lbl_r.pack(side="left", padx=10, pady=5)
+
+                if telf:
+                    btn = ctk.CTkButton(
+                        f_item,
+                        text="Enviar WA",
+                        width=100,
+                        fg_color="#25D366",
+                        hover_color="#128C7E",
+                        command=lambda n=nombre, r=rol_etiqueta, t=telf: self._enviar_wa(n, r, t),
+                    )
+                    btn.pack(side="right", padx=10, pady=5)
+                else:
+                    lbl_t = ctk.CTkLabel(f_item, text="Sin teléfono", text_color="#DC3545")
+                    lbl_t.pack(side="right", padx=10, pady=5)
+
+    def _enviar_wa(self, nombre: str, rol: str, telf: str):
+        import urllib.parse
+        import webbrowser
+
+        msg = (
+            f"Hola {nombre}, te recordamos tu asignación de *{rol}* "
+            "para esta semana en la reunión. ¡Gracias por tu disposición!"
+        )
+        url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
+        webbrowser.open(url)
+
+
 class AppAsignaciones(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -392,6 +505,15 @@ class AppAsignaciones(ctk.CTk):
         )
         self.btn_abrir_carpeta.pack(side="left", expand=True, fill="x", padx=5)
 
+        self.btn_recordatorios = ctk.CTkButton(
+            self.frame_acciones,
+            text="🔔 Recordatorios WhatsApp",
+            fg_color="#25D366",
+            hover_color="#128C7E",
+            command=self._abrir_ventana_recordatorios,
+        )
+        self.btn_recordatorios.pack(side="left", expand=True, fill="x", padx=(0, 5))
+
         # 6. Vista previa de resultados
         lbl_preview = ctk.CTkLabel(
             self,
@@ -483,6 +605,25 @@ class AppAsignaciones(ctk.CTk):
                 text=f"❌ Error al cargar hermanos: {e}", text_color="#DC3545"
             )
 
+    def _abrir_ventana_recordatorios(self):
+        anio = int(self.combo_anio.get())
+        mes_idx = MESES.index(self.combo_mes.get()) + 1
+        semanas = calcular_semanas_mes(anio, mes_idx)
+        asignaciones = self.repo.leer_asignaciones_mes(anio, mes_idx)
+
+        try:
+            VentanaRecordatorios(
+                parent=self,
+                repo=self.repo,
+                anio=anio,
+                mes=mes_idx,
+                semanas=semanas,
+                asignaciones=asignaciones,
+            )
+        except Exception as e:
+            logger.exception("Error al abrir ventana de recordatorios: %s", e)
+            self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
+
     def _ejecutar_generacion(self):
         try:
             self.lbl_estado.configure(text="Generando Excel...", text_color="gray")
@@ -503,6 +644,9 @@ class AppAsignaciones(ctk.CTk):
             # Generar motor aplicando ausencias
             motor = MotorAsignacion(hermanos=hermanos)
             asignaciones = motor.generar_mes(num_semanas=len(semanas), ausencias=ausencias_motor)
+
+            # Guardar en base de datos para recordatorios
+            self.repo.guardar_asignaciones_mes(anio, mes_idx, asignaciones)
 
             nombre_sugerido = f"programa_{mes_str.lower()}_{anio}"
             ruta_xlsx = self.carpeta_salida / f"{nombre_sugerido}.xlsx"
