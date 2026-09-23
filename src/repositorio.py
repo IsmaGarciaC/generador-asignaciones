@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -34,8 +35,12 @@ class Repositorio:
         roles = set()
         for linea in self.ruta_roles.read_text(encoding="utf-8").splitlines():
             token = linea.strip()
-            if token and all(c.islower() or c == "_" for c in token):
+            if not token:
+                continue
+            if all(c.islower() or c == "_" for c in token):
                 roles.add(token)
+            else:
+                raise DatosInvalidosError(f"Formato de rol inválido en roles.txt: '{token}'. Solo se permiten minúsculas y guiones bajos.")
 
         if not roles:
             raise DatosInvalidosError("El catálogo de roles está vacío.")
@@ -65,6 +70,8 @@ class Repositorio:
 
         for idx, item in enumerate(datos_raw):
             try:
+                if not isinstance(item, dict):
+                    raise DatosInvalidosError(f"Persona #{idx + 1}: el elemento no es un objeto JSON.")
                 hermano = Hermano(**item)
             except ValidationError as e:
                 logger.error("Error de validación Pydantic en persona #%d: %s", idx + 1, e)
@@ -108,7 +115,9 @@ class Repositorio:
 
     def guardar_estado(self, estado: EstadoMes):
         try:
-            self.ruta_estado.write_text(estado.model_dump_json(indent=4), encoding="utf-8")
+            ruta_tmp = self.ruta_estado.with_suffix('.tmp')
+            ruta_tmp.write_text(estado.model_dump_json(indent=4), encoding="utf-8")
+            os.replace(ruta_tmp, self.ruta_estado)
         except OSError as e:
             logger.error("Error guardando estado: %s", e)
 
@@ -125,7 +134,9 @@ class Repositorio:
     def guardar_todas_ausencias(self, ausencias: Dict[str, Dict[str, List[int]]]):
         try:
             contenido = json.dumps(ausencias, indent=4, ensure_ascii=False)
-            self.ruta_ausencias.write_text(contenido, encoding="utf-8")
+            ruta_tmp = self.ruta_ausencias.with_suffix('.tmp')
+            ruta_tmp.write_text(contenido, encoding="utf-8")
+            os.replace(ruta_tmp, self.ruta_ausencias)
         except OSError as e:
             logger.error("Error guardando ausencias: %s", e)
 

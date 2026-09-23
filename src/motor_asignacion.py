@@ -21,9 +21,14 @@ class MotorAsignacion:
         self.rng = random.Random(seed)
 
         # Normalizar hermanos a objetos Hermano
-        self.hermanos: List[Hermano] = [
-            h if isinstance(h, Hermano) else Hermano(**h) for h in hermanos
-        ]
+        self.hermanos: List[Hermano] = []
+        for h in hermanos:
+            if isinstance(h, Hermano):
+                self.hermanos.append(h)
+            elif isinstance(h, dict):
+                self.hermanos.append(Hermano(**h))
+            else:
+                raise ValueError(f"Formato de hermano inválido: {type(h)}. Se esperaba Hermano o dict.")
 
         self.historial_carga: Dict[str, dict] = self._inicializar_historial()
 
@@ -198,6 +203,9 @@ class MotorAsignacion:
         ausencias: Optional[Dict[int, List[str]]] = None,
     ) -> Dict[int, Dict[str, List[str]]]:
         """Genera las asignaciones mensuales respetando la rotación equitativa."""
+        if num_semanas <= 0:
+            raise ValueError(f"El número de semanas debe ser mayor a 0, se recibió: {num_semanas}")
+
         if ausencias is None:
             ausencias = {}
 
