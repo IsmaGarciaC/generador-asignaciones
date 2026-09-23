@@ -14,8 +14,8 @@ from configuracion import BASE_DIR, logger  # noqa: E402
 from exportador_excel import (  # noqa: E402
     calcular_semanas_mes,
     exportar_programa_excel,
-    grupo_sugerido_para_mes,
 )
+from modelos import EstadoMes  # noqa: E402
 from motor_asignacion import MotorAsignacion  # noqa: E402
 from repositorio import DatosInvalidosError, Repositorio  # noqa: E402
 
@@ -301,15 +301,11 @@ class AppAsignaciones(ctk.CTk):
         )
         self.lbl_semanas_detectadas.grid(row=0, column=4, padx=15, pady=12, sticky="w")
 
-        # Fila 2: Grupo de Limpieza Inicial y Botón de Ausencias
         lbl_grupo = ctk.CTkLabel(
             frame_config, text="Limpieza inicial:", font=ctk.CTkFont(weight="bold")
         )
         lbl_grupo.grid(row=1, column=0, padx=(20, 10), pady=(0, 15), sticky="w")
-
-        siguiente_sugerido = grupo_sugerido_para_mes(
-            anio_defecto, mes_defecto, str(self.repo.ruta_estado)
-        )
+        siguiente_sugerido = self._grupo_sugerido_para_mes(anio_defecto, mes_defecto)
         self.combo_grupo = ctk.CTkOptionMenu(
             frame_config,
             values=["Grupo # 1", "Grupo # 2", "Grupo # 3", "Grupo # 4"],
@@ -394,10 +390,22 @@ class AppAsignaciones(ctk.CTk):
         semanas = calcular_semanas_mes(anio, mes_idx)
         self.lbl_semanas_detectadas.configure(text=f"• {len(semanas)} semanas (martes a domingo)")
 
+    def _grupo_sugerido_para_mes(self, anio: int, mes: int) -> int:
+        estado = self.repo.leer_estado()
+        if not estado:
+            return 1
+
+        if estado.ultimo_anio == anio and estado.ultimo_mes == mes:
+            ultimo = estado.ultimo_grupo_limpieza
+            num_semanas = len(calcular_semanas_mes(anio, mes))
+            return ((ultimo - 1 - (num_semanas - 1)) % 4) + 1
+
+        return estado.siguiente_grupo_limpieza
+
     def _actualizar_grupo_sugerido(self):
         anio = int(self.combo_anio.get())
         mes_idx = MESES.index(self.combo_mes.get()) + 1
-        grupo = grupo_sugerido_para_mes(anio, mes_idx, str(self.repo.ruta_estado))
+        grupo = self._grupo_sugerido_para_mes(anio, mes_idx)
         self.combo_grupo.set(f"Grupo # {grupo}")
 
     def actualizar_conteo_ausencias(self):
@@ -471,8 +479,19 @@ class AppAsignaciones(ctk.CTk):
                 mes=mes_idx,
                 grupo_inicio_limpieza=grupo_seleccionado,
                 ruta_salida=str(ruta_xlsx),
-                ruta_estado=str(self.repo.ruta_estado),
             )
+
+            # Actualizar estado para el mes siguiente
+            ultimo_grupo = ((grupo_seleccionado - 1 + (len(semanas) - 1)) % 4) + 1
+            siguiente_grupo = (ultimo_grupo % 4) + 1
+
+            nuevo_estado = EstadoMes(
+                ultimo_anio=anio,
+                ultimo_mes=mes_idx,
+                ultimo_grupo_limpieza=ultimo_grupo,
+                siguiente_grupo_limpieza=siguiente_grupo,
+            )
+            self.repo.guardar_estado(nuevo_estado)
 
             self.ultimo_excel = ruta_xlsx
 

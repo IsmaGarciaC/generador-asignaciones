@@ -1,6 +1,5 @@
 import calendar
 import datetime
-import json
 from pathlib import Path
 
 import openpyxl
@@ -39,63 +38,6 @@ def aplicar_borde_rango(ws, r_ini: int, r_fin: int, c_ini: int, c_fin: int, bord
     for r in range(r_ini, r_fin + 1):
         for c in range(c_ini, c_fin + 1):
             ws.cell(row=r, column=c).border = borde
-
-
-def _leer_estado(ruta_estado: str) -> dict | None:
-    archivo = Path(ruta_estado)
-    if not archivo.exists():
-        return None
-    try:
-        with open(archivo, "r", encoding="utf-8") as f:
-            datos = json.load(f)
-        return datos if isinstance(datos, dict) else None
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def obtener_siguiente_grupo(ruta_estado: str = "data/estado.json") -> int:
-    """Lee el grupo de limpieza que corresponde a la primera semana del siguiente mes."""
-    datos = _leer_estado(ruta_estado)
-    if datos is None:
-        return 1
-    return int(datos.get("siguiente_grupo_limpieza", 1) or 1)
-
-
-def grupo_sugerido_para_mes(anio: int, mes: int, ruta_estado: str = "data/estado.json") -> int:
-    """Grupo de inicio del mes seleccionado, o el siguiente guardado si es un mes nuevo."""
-    datos = _leer_estado(ruta_estado)
-    if datos is None:
-        return 1
-
-    if datos.get("ultimo_anio") == anio and datos.get("ultimo_mes") == mes:
-        ultimo = int(datos.get("ultimo_grupo_limpieza", 1) or 1)
-        num_semanas = len(calcular_semanas_mes(anio, mes))
-        return ((ultimo - 1 - (num_semanas - 1)) % 4) + 1
-
-    return int(datos.get("siguiente_grupo_limpieza", 1) or 1)
-
-
-def guardar_estado(anio: int, mes: int, ultimo_grupo: int, ruta_estado: str = "data/estado.json"):
-    """Persiste la rotación de los 4 grupos. Regenerar el mismo mes no avanza la rueda.
-
-    Solo se recuerda el último mes generado: volver a un mes anterior después de
-    haber generado otro sí puede desfasar la rotación.
-    """
-    archivo = Path(ruta_estado)
-    previo = _leer_estado(ruta_estado)
-    if previo is not None and previo.get("ultimo_anio") == anio and previo.get("ultimo_mes") == mes:
-        return
-
-    archivo.parent.mkdir(parents=True, exist_ok=True)
-    siguiente_grupo = (ultimo_grupo % 4) + 1
-    datos = {
-        "ultimo_anio": anio,
-        "ultimo_mes": mes,
-        "ultimo_grupo_limpieza": ultimo_grupo,
-        "siguiente_grupo_limpieza": siguiente_grupo,
-    }
-    with open(archivo, "w", encoding="utf-8") as f:
-        json.dump(datos, f, indent=4, ensure_ascii=False)
 
 
 def calcular_semanas_mes(anio: int, mes: int) -> list[dict]:
@@ -157,19 +99,15 @@ def exportar_programa_excel(
     mes_asignaciones: dict[int, dict],
     anio: int,
     mes: int,
-    grupo_inicio_limpieza: int | None = None,
+    grupo_inicio_limpieza: int,
     ruta_salida: str = "salida/programa_mes.xlsx",
-    ruta_estado: str = "data/estado.json",
 ) -> dict:
     """
     Genera el archivo Excel optimizado:
     Hoja 1: 'Programa General' en una tabla matriz única para el tablero (A4 horizontal).
     Hoja 2: 'Audio y Video' para el equipo técnico digital.
     """
-    if grupo_inicio_limpieza is None:
-        grupo_inicio = obtener_siguiente_grupo(ruta_estado)
-    else:
-        grupo_inicio = grupo_inicio_limpieza
+    grupo_inicio = grupo_inicio_limpieza
 
     wb = openpyxl.Workbook()
     semanas = calcular_semanas_mes(anio, mes)
@@ -367,10 +305,6 @@ def exportar_programa_excel(
     ruta = Path(ruta_salida)
     ruta.parent.mkdir(parents=True, exist_ok=True)
     wb.save(ruta)
-
-    # Actualizar estado para el mes siguiente
-    ultimo_grupo = ((grupo_inicio - 1 + (num_semanas - 1)) % 4) + 1
-    guardar_estado(anio, mes, ultimo_grupo, ruta_estado)
 
     col_fin = get_column_letter(num_semanas + 1)
     fila_fin = r_actual - 1
