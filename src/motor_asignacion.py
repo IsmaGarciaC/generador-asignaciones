@@ -4,9 +4,6 @@ from typing import Dict, List, Optional, Set, Union
 from configuracion import logger
 from modelos import Hermano, ReglasAsignacion
 
-# Mantenemos PUESTOS_REQUERIDOS a nivel de módulo para retrocompatibilidad
-PUESTOS_REQUERIDOS = ReglasAsignacion().puestos_requeridos
-
 
 class MotorAsignacion:
     """
@@ -139,9 +136,7 @@ class MotorAsignacion:
 
             for _ in range(cantidad):
                 candidatos_ronda = [
-                    h
-                    for h in disponibles
-                    if h.nombre not in [s.nombre for s in seleccionados]
+                    h for h in disponibles if h.nombre not in [s.nombre for s in seleccionados]
                 ]
 
                 if not candidatos_ronda:
@@ -251,70 +246,3 @@ class MotorAsignacion:
                         }
                     )
         return huecos
-
-
-# =====================================================================
-# Funciones helper para retrocompatibilidad con módulos existentes
-# =====================================================================
-
-
-def listar_puestos_incompletos(mes_asignaciones: dict[int, dict]) -> list[dict]:
-    """Puestos con menos personas que PUESTOS_REQUERIDOS en alguna semana."""
-    motor = MotorAsignacion(hermanos=[])
-    return motor.listar_puestos_incompletos(mes_asignaciones)
-
-
-def filtrar_por_rol(hermanos: list[dict], rol: str) -> list[dict]:
-    """Retorna los hermanos capacitados para un rol específico."""
-    motor = MotorAsignacion(hermanos=hermanos)
-    return [h.model_dump() for h in motor.filtrar_por_rol(rol)]
-
-
-def inicializar_historial(hermanos: list[dict]) -> dict[str, dict]:
-    """Inicializa contadores de equidad, roles previos, parejas y rachas de trabajo."""
-    motor = MotorAsignacion(hermanos=hermanos)
-    return motor.historial_carga
-
-
-def asignar_semana(
-    hermanos: list[dict],
-    historial_carga: dict[str, dict],
-    asignados_semana_anterior: dict[str, str] = None,
-    ausentes_esta_semana: set[str] = None,
-) -> dict[str, list[str]]:
-    """Función de compatibilidad para asignación de una semana."""
-    motor = MotorAsignacion(hermanos=hermanos)
-    motor.historial_carga = historial_carga
-    return motor.asignar_semana(
-        semana_idx=1,
-        asignados_semana_anterior=asignados_semana_anterior,
-        ausentes_esta_semana=ausentes_esta_semana,
-    )
-
-
-def generar_mes(
-    hermanos: list[dict],
-    num_semanas: int,
-    ausencias: dict[int, list[str]] | None = None,
-    seed: Optional[int] = None,
-) -> dict[int, dict]:
-    """Genera las asignaciones mensuales respetando la rotación equitativa."""
-    motor = MotorAsignacion(hermanos=hermanos, seed=seed)
-    return motor.generar_mes(num_semanas=num_semanas, ausencias=ausencias)
-
-
-if __name__ == "__main__":
-    from cargador_datos import cargar_hermanos
-
-    try:
-        hermanos_raw = cargar_hermanos("data/hermanos.json")
-    except Exception:
-        hermanos_raw = cargar_hermanos("data/hermanos.example.json")
-
-    motor = MotorAsignacion(hermanos=hermanos_raw, seed=42)
-    mes = motor.generar_mes(num_semanas=4, ausencias={1: ["Santiago Silva"]})
-
-    for sem, asig in mes.items():
-        print(f"\n=== SEMANA {sem} ===")
-        for p, asignados in asig.items():
-            print(f"  {p:15}: {asignados}")
