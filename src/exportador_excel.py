@@ -6,6 +6,8 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from modelos import ReglasAsignacion
+
 # ====================================================
 # ESTILOS OPTIMIZADOS PARA IMPRESIÓN EN BLANCO Y NEGRO (B/N)
 # ====================================================
@@ -188,24 +190,14 @@ def exportar_programa_excel(
     ws_gen.row_dimensions[2].height = 18
     ws_gen.row_dimensions[3].height = 25
 
-    # 3. FILAS Y SECCIONES UNIFICADAS
-    estructura_tabla = [
-        # SECCIÓN 1: AUDITORIO Y SALA
-        (True, "AUDITORIO Y PLATAFORMA", None, 24),
-        (False, "Acomodadores", "acomodador", 45),
-        (False, "Plataforma", "plataforma", 30),
-        (False, "Micrófonos", "microfonos", 45),
-        (False, "Limpieza del Salón", "limpieza", 30),
-        (False, "Hospitalidad", "hospitalidad", 30),
-        # SECCIÓN 2: PLATAFORMA Y LECTURAS
-        (True, "PRESIDENCIA Y LECTURAS", None, 24),
-        (False, "Lector Estudio Bíblico", "lector_martes", 30),
-        (False, "Presidente", "presidente", 30),
-        (False, "Lector de La Atalaya", "lector_domingo", 30),
-    ]
-
+    _reglas = ReglasAsignacion()
     r_actual = 4
-    for es_sec, label, key, alto_fila in estructura_tabla:
+    for item in _reglas.estructura_programa:
+        es_sec = item["es_seccion"]
+        label = item["label"]
+        key = item["key"]
+        alto_fila = item["alto"]
+
         if es_sec:
             ws_gen.merge_cells(
                 start_row=r_actual,
@@ -228,11 +220,15 @@ def exportar_programa_excel(
 
             for s_idx in range(1, num_semanas + 1):
                 if key == "limpieza":
-                    num_limpieza = ((grupo_inicio - 1 + (s_idx - 1)) % 4) + 1
+                    num_limpieza = (
+                        (grupo_inicio - 1 + (s_idx - 1)) % _reglas.num_grupos_limpieza
+                    ) + 1
                     val = f"Grupo # {num_limpieza}"
                 elif key == "hospitalidad":
-                    num_limpieza = ((grupo_inicio - 1 + (s_idx - 1)) % 4) + 1
-                    num_hosp = ((num_limpieza - 2) % 4) + 1
+                    num_limpieza = (
+                        (grupo_inicio - 1 + (s_idx - 1)) % _reglas.num_grupos_limpieza
+                    ) + 1
+                    num_hosp = ((num_limpieza - 2) % _reglas.num_grupos_limpieza) + 1
                     val = f"Grupo # {num_hosp}"
                 else:
                     nombres = mes_asignaciones.get(s_idx, {}).get(key, [])

@@ -40,7 +40,10 @@ class Repositorio:
             if all(c.islower() or c == "_" for c in token):
                 roles.add(token)
             else:
-                raise DatosInvalidosError(f"Formato de rol inválido en roles.txt: '{token}'. Solo se permiten minúsculas y guiones bajos.")
+                raise DatosInvalidosError(
+                    f"Formato de rol inválido en roles.txt: '{token}'. "
+                    "Solo se permiten minúsculas y guiones bajos."
+                )
 
         if not roles:
             raise DatosInvalidosError("El catálogo de roles está vacío.")
@@ -48,10 +51,16 @@ class Repositorio:
 
     def cargar_hermanos(self) -> List[Hermano]:
         if not self.ruta_hermanos.exists():
-            raise DatosInvalidosError(
-                f"No se encontró {self.ruta_hermanos.name}. "
-                "Copia hermanos.example.json a hermanos.json."
-            )
+            ruta_ejemplo = self.data_dir / "hermanos.example.json"
+            if ruta_ejemplo.exists():
+                import shutil
+
+                shutil.copy2(ruta_ejemplo, self.ruta_hermanos)
+                logger.info("Se copió hermanos.example.json a hermanos.json automáticamente.")
+            else:
+                raise DatosInvalidosError(
+                    f"No se encontró {self.ruta_hermanos.name} ni un archivo de ejemplo."
+                )
 
         try:
             datos_raw = json.loads(self.ruta_hermanos.read_text(encoding="utf-8"))
@@ -71,7 +80,9 @@ class Repositorio:
         for idx, item in enumerate(datos_raw):
             try:
                 if not isinstance(item, dict):
-                    raise DatosInvalidosError(f"Persona #{idx + 1}: el elemento no es un objeto JSON.")
+                    raise DatosInvalidosError(
+                        f"Persona #{idx + 1}: el elemento no es un objeto JSON."
+                    )
                 hermano = Hermano(**item)
             except ValidationError as e:
                 logger.error("Error de validación Pydantic en persona #%d: %s", idx + 1, e)
@@ -115,7 +126,7 @@ class Repositorio:
 
     def guardar_estado(self, estado: EstadoMes):
         try:
-            ruta_tmp = self.ruta_estado.with_suffix('.tmp')
+            ruta_tmp = self.ruta_estado.with_suffix(".tmp")
             ruta_tmp.write_text(estado.model_dump_json(indent=4), encoding="utf-8")
             os.replace(ruta_tmp, self.ruta_estado)
         except OSError as e:
@@ -134,7 +145,7 @@ class Repositorio:
     def guardar_todas_ausencias(self, ausencias: Dict[str, Dict[str, List[int]]]):
         try:
             contenido = json.dumps(ausencias, indent=4, ensure_ascii=False)
-            ruta_tmp = self.ruta_ausencias.with_suffix('.tmp')
+            ruta_tmp = self.ruta_ausencias.with_suffix(".tmp")
             ruta_tmp.write_text(contenido, encoding="utf-8")
             os.replace(ruta_tmp, self.ruta_ausencias)
         except OSError as e:

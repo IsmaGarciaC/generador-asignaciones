@@ -52,3 +52,28 @@ class ReglasAsignacion(BaseModel):
     puestos_emergencia_compatibles: Set[str] = Field(
         default_factory=lambda: {"microfonos", "audio", "video"}
     )
+    num_grupos_limpieza: int = Field(4, ge=1)
+    estructura_programa: List[dict] = Field(
+        default_factory=lambda: [
+            {"es_seccion": True, "label": "AUDITORIO Y PLATAFORMA", "key": None, "alto": 24},
+            {"es_seccion": False, "label": "Acomodadores", "key": "acomodador", "alto": 45},
+            {"es_seccion": False, "label": "Plataforma", "key": "plataforma", "alto": 30},
+            {"es_seccion": False, "label": "Micrófonos", "key": "microfonos", "alto": 45},
+            {"es_seccion": False, "label": "Limpieza del Salón", "key": "limpieza", "alto": 30},
+            {"es_seccion": False, "label": "Hospitalidad", "key": "hospitalidad", "alto": 30},
+            {"es_seccion": True, "label": "PRESIDENCIA Y LECTURAS", "key": None, "alto": 24},
+            {
+                "es_seccion": False,
+                "label": "Lector Estudio Bíblico",
+                "key": "lector_martes",
+                "alto": 30,
+            },
+            {"es_seccion": False, "label": "Presidente", "key": "presidente", "alto": 30},
+            {
+                "es_seccion": False,
+                "label": "Lector de La Atalaya",
+                "key": "lector_domingo",
+                "alto": 30,
+            },
+        ]
+    )

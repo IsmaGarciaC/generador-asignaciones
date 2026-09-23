@@ -28,7 +28,9 @@ class MotorAsignacion:
             elif isinstance(h, dict):
                 self.hermanos.append(Hermano(**h))
             else:
-                raise ValueError(f"Formato de hermano inválido: {type(h)}. Se esperaba Hermano o dict.")
+                raise ValueError(
+                    f"Formato de hermano inválido: {type(h)}. Se esperaba Hermano o dict."
+                )
 
         self.historial_carga: Dict[str, dict] = self._inicializar_historial()
 
