@@ -1,21 +1,23 @@
 import datetime
-import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import List
+
 import customtkinter as ctk
 
-# Asegurar importaciones locales
+# Asegurar importaciones locales tanto en desarrollo como en ejecutable
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR / "src"))
 
-from cargador_datos import DatosInvalidosError, cargar_hermanos
-from motor_asignacion import generar_mes, listar_puestos_incompletos
-from exportador_excel import (
+from configuracion import BASE_DIR, logger  # noqa: E402
+from exportador_excel import (  # noqa: E402
     calcular_semanas_mes,
     exportar_programa_excel,
     grupo_sugerido_para_mes,
 )
+from motor_asignacion import MotorAsignacion  # noqa: E402
+from repositorio import DatosInvalidosError, Repositorio  # noqa: E402
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -38,8 +40,20 @@ ETIQUETAS_PUESTO = {
 
 
 class VentanaAusencias(ctk.CTkToplevel):
-    """Ventana emergente para registrar hermanos que no estarán disponibles en semanas específicas."""
-    def __init__(self, parent, hermanos_nombres: list[str], anio: int, mes_idx: int, num_semanas: int, ruta_ausencias: Path):
+    """
+    Ventana emergente para registrar hermanos que no estarán disponibles
+    en semanas específicas.
+    """
+
+    def __init__(
+        self,
+        parent,
+        repo: Repositorio,
+        hermanos_nombres: List[str],
+        anio: int,
+        mes_idx: int,
+        num_semanas: int,
+    ):
         super().__init__(parent)
         self.title("Gestionar Ausencias")
         self.geometry("540x520")
@@ -48,51 +62,25 @@ class VentanaAusencias(ctk.CTkToplevel):
         self.grab_set()
 
         self.parent_app = parent
+        self.repo = repo
         self.hermanos_nombres = sorted(hermanos_nombres)
         self.anio = anio
         self.mes_idx = mes_idx
         self.num_semanas = num_semanas
-        self.ruta_ausencias = ruta_ausencias
-        self.clave_mes = f"{anio}-{mes_idx:02d}"
 
-        self.ausencias_mes = self._cargar_ausencias()
+        self.ausencias_mes = self.repo.leer_ausencias_mes(self.anio, self.mes_idx)
         self.checkboxes_semanas = []
 
         self._construir_ui()
 
-    def _cargar_ausencias(self) -> dict[str, list[int]]:
-        if self.ruta_ausencias.exists():
-            try:
-                with open(self.ruta_ausencias, "r", encoding="utf-8") as f:
-                    datos = json.load(f)
-                    return datos.get(self.clave_mes, {})
-            except Exception:
-                return {}
-        return {}
-
     def _guardar_en_disco(self):
-        datos = {}
-        if self.ruta_ausencias.exists():
-            try:
-                with open(self.ruta_ausencias, "r", encoding="utf-8") as f:
-                    datos = json.load(f)
-            except Exception:
-                datos = {}
-
-        if self.ausencias_mes:
-            datos[self.clave_mes] = self.ausencias_mes
-        elif self.clave_mes in datos:
-            del datos[self.clave_mes]
-
-        self.ruta_ausencias.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.ruta_ausencias, "w", encoding="utf-8") as f:
-            json.dump(datos, f, indent=4, ensure_ascii=False)
+        self.repo.guardar_ausencias_mes(self.anio, self.mes_idx, self.ausencias_mes)
 
     def _construir_ui(self):
         lbl_tit = ctk.CTkLabel(
             self,
             text=f"Ausencias para {MESES[self.mes_idx - 1]} {self.anio}",
-            font=ctk.CTkFont(family="Aptos", size=16, weight="bold")
+            font=ctk.CTkFont(family="Aptos", size=16, weight="bold"),
         )
         lbl_tit.pack(pady=(15, 5))
 
@@ -100,7 +88,7 @@ class VentanaAusencias(ctk.CTkToplevel):
             self,
             text="Selecciona el hermano y marca las semanas en que NO estará disponible.",
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color="gray",
         )
         lbl_desc.pack(pady=(0, 10))
 
@@ -115,7 +103,7 @@ class VentanaAusencias(ctk.CTkToplevel):
             frame_sel,
             values=self.hermanos_nombres,
             width=260,
-            command=self._al_cambiar_hermano
+            command=self._al_cambiar_hermano,
         )
         self.combo_hermano.pack(side="left")
         if self.hermanos_nombres:
@@ -125,7 +113,9 @@ class VentanaAusencias(ctk.CTkToplevel):
         frame_sems = ctk.CTkFrame(self)
         frame_sems.pack(fill="x", padx=20, pady=12)
 
-        lbl_sem_tit = ctk.CTkLabel(frame_sems, text="Semanas ausente:", font=ctk.CTkFont(weight="bold"))
+        lbl_sem_tit = ctk.CTkLabel(
+            frame_sems, text="Semanas ausente:", font=ctk.CTkFont(weight="bold")
+        )
         lbl_sem_tit.pack(anchor="w", padx=10, pady=(8, 4))
 
         frame_checks = ctk.CTkFrame(frame_sems, fg_color="transparent")
@@ -144,7 +134,7 @@ class VentanaAusencias(ctk.CTkToplevel):
         btn_asignar = ctk.CTkButton(
             frame_btn_h,
             text="Guardar Ausencia para este Hermano",
-            command=self._guardar_ausencia_hermano
+            command=self._guardar_ausencia_hermano,
         )
         btn_asignar.pack(side="left", expand=True, fill="x", padx=(0, 5))
 
@@ -153,15 +143,21 @@ class VentanaAusencias(ctk.CTkToplevel):
             text="Quitar Ausencias",
             fg_color="#A93226",
             hover_color="#7B241C",
-            command=self._quitar_ausencia_hermano
+            command=self._quitar_ausencia_hermano,
         )
         btn_quitar.pack(side="left", padx=(5, 0))
 
         # Lista de ausentes registrados
-        lbl_list = ctk.CTkLabel(self, text="Ausencias Registradas en este Mes:", font=ctk.CTkFont(weight="bold"))
+        lbl_list = ctk.CTkLabel(
+            self,
+            text="Ausencias Registradas en este Mes:",
+            font=ctk.CTkFont(weight="bold"),
+        )
         lbl_list.pack(anchor="w", padx=20, pady=(12, 4))
 
-        self.txt_lista = ctk.CTkTextbox(self, height=120, font=ctk.CTkFont(family="Consolas", size=11))
+        self.txt_lista = ctk.CTkTextbox(
+            self, height=120, font=ctk.CTkFont(family="Consolas", size=11)
+        )
         self.txt_lista.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
         # Botón Cerrar
@@ -222,10 +218,8 @@ class AppAsignaciones(ctk.CTk):
         self.geometry("820x700")
         self.minsize(780, 640)
 
-        # Rutas de datos
-        self.ruta_datos = BASE_DIR / "data" / "hermanos.json"
-        self.ruta_estado = BASE_DIR / "data" / "estado.json"
-        self.ruta_ausencias = BASE_DIR / "data" / "ausencias.json"
+        # Repositorio centralizado y carpeta de salida
+        self.repo = Repositorio()
         self.carpeta_salida = BASE_DIR / "salida"
         self.carpeta_salida.mkdir(parents=True, exist_ok=True)
 
@@ -243,15 +237,15 @@ class AppAsignaciones(ctk.CTk):
         lbl_tit = ctk.CTkLabel(
             frame_header,
             text="Generador de Asignaciones",
-            font=ctk.CTkFont(family="Aptos", size=22, weight="bold")
+            font=ctk.CTkFont(family="Aptos", size=22, weight="bold"),
         )
         lbl_tit.pack(anchor="w")
 
         lbl_sub = ctk.CTkLabel(
             frame_header,
-            text="Distribución equitativa, gestión de ausencias y exportación A4 para ONLYOFFICE.",
+            text="Distribución equitativa, gestión de ausencias y exportación A4 para impresión.",
             font=ctk.CTkFont(family="Aptos", size=13),
-            text_color="gray"
+            text_color="gray",
         )
         lbl_sub.pack(anchor="w")
 
@@ -272,7 +266,7 @@ class AppAsignaciones(ctk.CTk):
             frame_config,
             values=anios_disponibles,
             command=lambda _: self._al_cambiar_fecha(),
-            width=100
+            width=100,
         )
         self.combo_anio.set(str(anio_defecto))
         self.combo_anio.grid(row=0, column=1, padx=5, pady=12, sticky="w")
@@ -284,7 +278,7 @@ class AppAsignaciones(ctk.CTk):
             frame_config,
             values=MESES,
             command=lambda _: self._al_cambiar_fecha(),
-            width=130
+            width=130,
         )
         self.combo_mes.set(MESES[mes_defecto - 1])
         self.combo_mes.grid(row=0, column=3, padx=5, pady=12, sticky="w")
@@ -293,21 +287,23 @@ class AppAsignaciones(ctk.CTk):
             frame_config,
             text="",
             font=ctk.CTkFont(size=12, slant="italic"),
-            text_color="#3B8ED0"
+            text_color="#3B8ED0",
         )
         self.lbl_semanas_detectadas.grid(row=0, column=4, padx=15, pady=12, sticky="w")
 
         # Fila 2: Grupo de Limpieza Inicial y Botón de Ausencias
-        lbl_grupo = ctk.CTkLabel(frame_config, text="Limpieza inicial:", font=ctk.CTkFont(weight="bold"))
+        lbl_grupo = ctk.CTkLabel(
+            frame_config, text="Limpieza inicial:", font=ctk.CTkFont(weight="bold")
+        )
         lbl_grupo.grid(row=1, column=0, padx=(20, 10), pady=(0, 15), sticky="w")
 
         siguiente_sugerido = grupo_sugerido_para_mes(
-            anio_defecto, mes_defecto, str(self.ruta_estado)
+            anio_defecto, mes_defecto, str(self.repo.ruta_estado)
         )
         self.combo_grupo = ctk.CTkOptionMenu(
             frame_config,
             values=["Grupo # 1", "Grupo # 2", "Grupo # 3", "Grupo # 4"],
-            width=130
+            width=130,
         )
         self.combo_grupo.set(f"Grupo # {siguiente_sugerido}")
         self.combo_grupo.grid(row=1, column=1, columnspan=2, padx=5, pady=(0, 15), sticky="w")
@@ -318,7 +314,7 @@ class AppAsignaciones(ctk.CTk):
             fg_color="#D97706",
             hover_color="#B45309",
             command=self._abrir_ventana_ausencias,
-            width=170
+            width=170,
         )
         self.btn_ausencias.grid(row=1, column=3, columnspan=2, padx=10, pady=(0, 15), sticky="w")
 
@@ -328,7 +324,7 @@ class AppAsignaciones(ctk.CTk):
             text="✨ Generar Programa Completo",
             font=ctk.CTkFont(family="Aptos", size=14, weight="bold"),
             height=44,
-            command=self._ejecutar_generacion
+            command=self._ejecutar_generacion,
         )
         self.btn_generar.pack(fill="x", padx=25, pady=10)
 
@@ -348,21 +344,21 @@ class AppAsignaciones(ctk.CTk):
 
         self.btn_abrir_excel = ctk.CTkButton(
             self.frame_acciones,
-            text="📊 Abrir en ONLYOFFICE",
+            text="📊 Abrir Archivo Excel",
             state="disabled",
             fg_color="#107C41",
             hover_color="#0B5C30",
-            command=self._abrir_excel
+            command=self._abrir_excel,
         )
         self.btn_abrir_excel.pack(side="left", expand=True, fill="x", padx=(0, 5))
 
         self.btn_abrir_carpeta = ctk.CTkButton(
             self.frame_acciones,
-            text="📁 Abrir Carpeta",
+            text="📁 Abrir Carpeta de Salida",
             state="disabled",
             fg_color="#5A6268",
             hover_color="#43494E",
-            command=self._abrir_carpeta
+            command=self._abrir_carpeta,
         )
         self.btn_abrir_carpeta.pack(side="left", expand=True, fill="x", padx=5)
 
@@ -370,7 +366,7 @@ class AppAsignaciones(ctk.CTk):
         lbl_preview = ctk.CTkLabel(
             self,
             text="Vista Previa Rápida:",
-            font=ctk.CTkFont(weight="bold")
+            font=ctk.CTkFont(weight="bold"),
         )
         lbl_preview.pack(anchor="w", padx=25, pady=(15, 5))
 
@@ -391,70 +387,56 @@ class AppAsignaciones(ctk.CTk):
     def _actualizar_grupo_sugerido(self):
         anio = int(self.combo_anio.get())
         mes_idx = MESES.index(self.combo_mes.get()) + 1
-        grupo = grupo_sugerido_para_mes(anio, mes_idx, str(self.ruta_estado))
+        grupo = grupo_sugerido_para_mes(anio, mes_idx, str(self.repo.ruta_estado))
         self.combo_grupo.set(f"Grupo # {grupo}")
 
     def actualizar_conteo_ausencias(self):
         anio = int(self.combo_anio.get())
         mes_idx = MESES.index(self.combo_mes.get()) + 1
-        clave = f"{anio}-{mes_idx:02d}"
-
-        conteo = 0
-        if self.ruta_ausencias.exists():
-            try:
-                with open(self.ruta_ausencias, "r", encoding="utf-8") as f:
-                    datos = json.load(f)
-                    conteo = len(datos.get(clave, {}))
-            except Exception:
-                conteo = 0
-
+        datos_mes = self.repo.leer_ausencias_mes(anio, mes_idx)
+        conteo = len(datos_mes)
         self.btn_ausencias.configure(text=f"🚫 Ausencias del Mes ({conteo})")
 
     def _obtener_mapa_ausencias_motor(self, anio: int, mes_idx: int) -> dict[int, list[str]]:
         """Convierte {nombre: [semanas]} a {semana_int: [lista_nombres]} para el motor."""
-        clave = f"{anio}-{mes_idx:02d}"
+        mes_data = self.repo.leer_ausencias_mes(anio, mes_idx)
         mapa_semanas = {}
-
-        if self.ruta_ausencias.exists():
-            try:
-                with open(self.ruta_ausencias, "r", encoding="utf-8") as f:
-                    datos = json.load(f)
-                    mes_data = datos.get(clave, {})
-                    for nombre, sems in mes_data.items():
-                        for s in sems:
-                            mapa_semanas.setdefault(int(s), []).append(nombre)
-            except Exception:
-                pass
-
+        for nombre, sems in mes_data.items():
+            for s in sems:
+                mapa_semanas.setdefault(int(s), []).append(nombre)
         return mapa_semanas
 
     def _abrir_ventana_ausencias(self):
         try:
-            hermanos = cargar_hermanos(str(self.ruta_datos))
-            nombres = [h["nombre"] for h in hermanos]
+            hermanos = self.repo.cargar_hermanos()
+            nombres = [h.nombre for h in hermanos]
             anio = int(self.combo_anio.get())
             mes_idx = MESES.index(self.combo_mes.get()) + 1
             semanas = calcular_semanas_mes(anio, mes_idx)
 
             VentanaAusencias(
                 parent=self,
+                repo=self.repo,
                 hermanos_nombres=nombres,
                 anio=anio,
                 mes_idx=mes_idx,
                 num_semanas=len(semanas),
-                ruta_ausencias=self.ruta_ausencias
             )
         except DatosInvalidosError as e:
+            logger.error("Error abriendo ventana ausencias: %s", e)
             self.lbl_estado.configure(text=f"❌ {e}", text_color="#DC3545")
         except Exception as e:
-            self.lbl_estado.configure(text=f"❌ Error al cargar hermanos: {e}", text_color="#DC3545")
+            logger.exception("Error inesperado al abrir ausencias: %s", e)
+            self.lbl_estado.configure(
+                text=f"❌ Error al cargar hermanos: {e}", text_color="#DC3545"
+            )
 
     def _ejecutar_generacion(self):
         try:
             self.lbl_estado.configure(text="Generando Excel...", text_color="gray")
             self.update_idletasks()
 
-            hermanos = cargar_hermanos(str(self.ruta_datos))
+            hermanos = self.repo.cargar_hermanos()
 
             anio = int(self.combo_anio.get())
             mes_str = self.combo_mes.get()
@@ -467,7 +449,10 @@ class AppAsignaciones(ctk.CTk):
             ausencias_motor = self._obtener_mapa_ausencias_motor(anio, mes_idx)
 
             # Generar motor aplicando ausencias
-            asignaciones = generar_mes(hermanos, num_semanas=len(semanas), ausencias=ausencias_motor)
+            motor = MotorAsignacion(hermanos=hermanos)
+            asignaciones = motor.generar_mes(
+                num_semanas=len(semanas), ausencias=ausencias_motor
+            )
 
             nombre_sugerido = f"programa_{mes_str.lower()}_{anio}"
             ruta_xlsx = self.carpeta_salida / f"{nombre_sugerido}.xlsx"
@@ -478,7 +463,7 @@ class AppAsignaciones(ctk.CTk):
                 mes=mes_idx,
                 grupo_inicio_limpieza=grupo_seleccionado,
                 ruta_salida=str(ruta_xlsx),
-                ruta_estado=str(self.ruta_estado),
+                ruta_estado=str(self.repo.ruta_estado),
             )
 
             self.ultimo_excel = ruta_xlsx
@@ -486,7 +471,7 @@ class AppAsignaciones(ctk.CTk):
             self.btn_abrir_excel.configure(state="normal")
             self.btn_abrir_carpeta.configure(state="normal")
 
-            huecos = listar_puestos_incompletos(asignaciones)
+            huecos = motor.listar_puestos_incompletos(asignaciones)
             self.combo_grupo.set(f"Grupo # {grupo_seleccionado}")
 
             if huecos:
@@ -501,15 +486,18 @@ class AppAsignaciones(ctk.CTk):
                 )
             else:
                 self.lbl_estado.configure(
-                    text="✅ ¡Programa generado respetando ausencias! Presiona 'Abrir en ONLYOFFICE'.",
+                    text="✅ ¡Programa generado respetando ausencias! "
+                    "Presiona 'Abrir Archivo Excel'.",
                     text_color="#28A745",
                 )
 
             self._mostrar_resumen(asignaciones, semanas, mes_str, anio, huecos)
 
         except DatosInvalidosError as e:
+            logger.error("Error validando datos en generación: %s", e)
             self.lbl_estado.configure(text=f"❌ {e}", text_color="#DC3545")
         except Exception as e:
+            logger.exception("Error general en generación: %s", e)
             self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
 
     def _mostrar_resumen(self, asignaciones, semanas, mes_str, anio, huecos=None):
@@ -536,7 +524,11 @@ class AppAsignaciones(ctk.CTk):
             lineas.append(f"  Plataforma      : {', '.join(asig.get('plataforma', []))}")
             lineas.append(f"  Micrófonos      : {' / '.join(asig.get('microfonos', []))}")
             lineas.append(f"  Acomodadores    : {' / '.join(asig.get('acomodador', []))}")
-            lineas.append(f"  Cabina (A/V)    : {', '.join(asig.get('audio', []))} (Aud) | {', '.join(asig.get('video', []))} (Vid)")
+            cabina_txt = (
+                f"{', '.join(asig.get('audio', []))} (Aud) | "
+                f"{', '.join(asig.get('video', []))} (Vid)"
+            )
+            lineas.append(f"  Cabina (A/V)    : {cabina_txt}")
             lineas.append("")
 
         self.txt_preview.insert("1.0", "\n".join(lineas))
