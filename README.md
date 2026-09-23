@@ -88,9 +88,12 @@ El ejecutable finalizado y sus archivos de configuración necesarios (`data/` y 
 
 ---
 
-## 📁 Datos y Reglas de Negocio
+## 📁 Datos, Configuración y Reglas de Negocio
 
-*   **Privacidad de Datos:** La lista real de hermanos (`hermanos.json`) y sus ausencias se ignoran en Git. Para empezar a usar el programa, simplemente copia `data/hermanos.example.json` a `data/hermanos.json` y configúralo con los datos reales.
+*   **Primer Arranque Automático (Zero-Config):** La lista real de hermanos (`hermanos.json`) se ignora en Git por privacidad. Sin embargo, al arrancar la app por primera vez, el sistema clonará automáticamente `hermanos.example.json` para que puedas empezar a probar la interfaz de inmediato sin ver errores.
+*   **Adaptabilidad Total (White-Label):** El programa ya no asume un número estático de grupos ni nombres de puestos fijos.
+    *   **Grupos Dinámicos:** Si tu congregación cambia de tener 4 grupos a tener 5 o 3, puedes modificar la variable `num_grupos_limpieza` en `ReglasAsignacion` (`src/modelos.py`) y toda la aplicación (UI y Excel) se adaptará de inmediato.
+    *   **Puestos y Etiquetas:** La estructura del Excel y los nombres de las asignaciones están configurados dinámicamente. Puedes agregar, quitar o renombrar asignaciones modificando la lista `estructura_programa` en la configuración central.
 *   **Semanas:** Cada martes del mes abre una semana de programa hasta el domingo.
-*   **Ciclos Mensuales:** Regenerar el mismo mes no avanza los grupos de limpieza. Volver a un mes anterior puede desfasar la rotación, ya que el sistema solo almacena el último estado generado.
+*   **Ciclos Mensuales:** Regenerar el mismo mes no avanza los grupos de limpieza. El sistema guarda la rotación mes a mes de forma atómica para evitar corrupción de datos.
 *   **Alertas Visuales:** Si los recursos no son suficientes para cubrir los puestos de una semana, la interfaz gráfica alertará en texto rojo listando detalladamente los "huecos" o puestos vacíos. Estos igualmente se exportan al Excel en blanco para llenarlos a mano.
