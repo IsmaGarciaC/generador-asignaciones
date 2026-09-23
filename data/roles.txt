@@ -1,4 +1,4 @@
-Roles válidos (única fuente de verdad para el JSON de hermanos):
+# Roles válidos (única fuente de verdad para el JSON de hermanos):
 
 acomodador
 microfonos
