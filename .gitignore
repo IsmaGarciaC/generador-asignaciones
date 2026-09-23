@@ -16,3 +16,9 @@ data/ausencias.json
 # Archivos de configuración del editor
 .vscode/
 .idea/
+
+# Paquetes y logs
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+generador.log
