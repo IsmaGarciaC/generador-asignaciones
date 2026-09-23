@@ -12,8 +12,7 @@ def cargar_roles_validos(ruta_roles: str | Path) -> Set[str]:
     return repo.cargar_roles_validos()
 
 def cargar_hermanos(ruta_archivo: str | Path) -> List[Dict]:
-    """
-    Retorna la lista de diccionarios por compatibilidad temporal 
+    """Retorna la lista de diccionarios por compatibilidad temporal
     (hasta refactorizar motor_asignacion.py en la Fase 3).
     """
     repo = Repositorio(data_dir=Path(ruta_archivo).parent)

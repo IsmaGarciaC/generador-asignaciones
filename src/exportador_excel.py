@@ -2,8 +2,9 @@ import calendar
 import datetime
 import json
 from pathlib import Path
+
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 # ====================================================
@@ -129,7 +130,10 @@ def calcular_semanas_mes(anio: int, mes: int) -> list[dict]:
             sub_fecha = f"{mar.day:02d} - {dom.day:02d} {mes_corto[dom.month]}."
         else:
             etiq_av = f"{mar.day:02d} {mes_corto[mar.month]} - {dom.day:02d} {mes_corto[dom.month]}"
-            sub_fecha = f"{mar.day:02d} {mes_corto[mar.month]}. - {dom.day:02d} {mes_corto[dom.month]}."
+            sub_fecha = (
+                f"{mar.day:02d} {mes_corto[mar.month]}. - "
+                f"{dom.day:02d} {mes_corto[dom.month]}."
+            )
 
         semanas.append({
             "semana": idx + 1,
@@ -249,7 +253,12 @@ def exportar_programa_excel(
     r_actual = 4
     for es_sec, label, key, alto_fila in estructura_tabla:
         if es_sec:
-            ws_gen.merge_cells(start_row=r_actual, start_column=1, end_row=r_actual, end_column=num_semanas + 1)
+            ws_gen.merge_cells(
+                start_row=r_actual,
+                start_column=1,
+                end_row=r_actual,
+                end_column=num_semanas + 1,
+            )
             for c_idx in range(1, num_semanas + 2):
                 c = ws_gen.cell(row=r_actual, column=c_idx)
                 c.fill = FILL_SECCION
