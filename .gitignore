@@ -22,3 +22,6 @@ data/ausencias.json
 .pytest_cache/
 .ruff_cache/
 generador.log
+build/
+dist/
+*.spec
