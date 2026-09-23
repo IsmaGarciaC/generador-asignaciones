@@ -1,15 +1,27 @@
-# ⚡ Congregation Assignment Engine & Dispatcher
+# ⚡ Generador de Asignaciones (Congregation Dispatcher)
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![Architecture](https://img.shields.io/badge/Architecture-Modular_Decoupled-orange?style=flat)]()
-[![GUI](https://img.shields.io/badge/GUI-CustomTkinter-blue?style=flat)](https://github.com/TomSchimansky/CustomTkinter)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Architecture](https://img.shields.io/badge/Architecture-Clean_Architecture-orange?style=flat)]()
+[![Build](https://img.shields.io/badge/Build-PyInstaller-success?style=flat)]()
+[![Testing](https://img.shields.io/badge/Testing-Pytest-blue?style=flat)]()
+[![Code Style](https://img.shields.io/badge/Code_Style-Ruff-black?style=flat)]()
 
-Motor de satisfacción de restricciones (CSP) para la automatización y despacho de asignaciones mensuales. Diseñado para mitigar la fatiga operativa, balancear equitativamente cargas de trabajo mediante penalización multicriterio y exportar matrices listas para impresión y despliegue digital.
+Motor heurístico de satisfacción de restricciones y balance de carga para la asignación mensual de puestos en la congregación. Diseñado para mitigar la fatiga operativa, balancear equitativamente cargas de trabajo mediante penalización multicriterio y exportar matrices listas para impresión y despliegue digital.
 
 ---
 
-## Algoritmo y Resolución de Restricciones
+## 🏗️ Arquitectura y Stack Tecnológico
+
+El proyecto ha sido refactorizado siguiendo principios de **Clean Architecture**, asegurando una alta mantenibilidad, tipado estricto y separación de responsabilidades:
+
+*   **Dominio y Modelado (`src/modelos.py`):** Modelos de datos rigurosos utilizando `Pydantic` para validación en tiempo de ejecución.
+*   **Acceso a Datos (`src/repositorio.py`):** Patrón Repositorio como única fuente de verdad para la entrada y salida de archivos JSON.
+*   **Motor Heurístico (`src/motor_asignacion.py`):** Lógica pura de asignación (desacoplada de archivos y UI).
+*   **Interfaz de Usuario (`src/interfaz_grafica.py`):** Construida con `CustomTkinter` para una UI nativa, con modo oscuro y aceleración de hardware.
+*   **Exportación (`src/exportador_excel.py`):** Manipulación de celdas a bajo nivel con `openpyxl` para crear hojas A4 listas para imprimir.
+*   **Empaquetado (`pyproject.toml` y `build.py`):** Gestión moderna de dependencias y script de compilación para distribución en `.exe` portátil.
+
+## 🧠 Algoritmo y Resolución de Restricciones
 
 El sistema opera como un despachador determinista guiado por heurísticas de costo mínimo. Para cada semana, el motor evalúa el espacio de candidatos utilizando una función de coste acumulado:
 
@@ -17,58 +29,68 @@ El sistema opera como un despachador determinista guiado por heurísticas de cos
 Puntos(h) = CargaBase(h) + P[rol_mes] + P[previa] + P[fatiga] + P[pareja] + P[doblete]
 ```
 
-- **Balance Cero-Sesgo:** Ponderación basada en el historial del mes (`CargaBase`).
-- **Penalizaciones:** Prevención estricta de repetición de roles ($+16$), fatiga por semanas consecutivas ($+12$) y parejas duplicadas ($+14$).
-- **Válvula de Emergencia ($+35$):** Si un rol crítico queda desierto por restricciones cruzadas, el motor flexibiliza exclusiones permitiendo un "doblete" justificado sin colapsar la matriz.
+*   **Balance Cero-Sesgo:** Ponderación basada en el historial de asignaciones previas del mes (`CargaBase`).
+*   **Penalizaciones Estrictas:** Prevención de repetición de roles, fatiga por semanas consecutivas y parejas duplicadas en acomodadores.
+*   **Válvula de Emergencia:** Si un rol crítico queda desierto por restricciones cruzadas, el motor flexibiliza exclusiones permitiendo un "doblete" justificado sin colapsar la matriz.
 
 ---
 
-## Arquitectura del Sistema
+## 🚀 Uso y Desarrollo
 
-Diseño desacoplado basado en capas para separar la interfaz de usuario, la lógica de dominio y el motor de exportación:
+### 1. Requisitos e Instalación
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│              Capa de Presentación (UI)                  │
-│       CustomTkinter Desktop App (interfaz_grafica.py)   │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Dispara ejecución / Parámetros
-┌───────────────────────────▼─────────────────────────────┐
-│               Capa de Dominio y Lógica                  │
-│     Motor Heurístico de Asignación (motor_asignacion.py)│
-└──────────────┬───────────────────────────┬──────────────┘
-               │ Valida disponibilidad     │ Entrega matriz
-┌──────────────▼──────────────┐ ┌──────────▼──────────────┐
-│     Persistencia Local      │ │ Motor Editorial XLSX    │
-│  - hermanos.json (Perfil)   │ │ (exportador_excel.py)   │
-│  - ausencias.json (Temp)    │ └──────────┬──────────────┘
-│  - estado.json (Rotación)   │            │ Genera
-└─────────────────────────────┘ ┌──────────▼──────────────┐
-                                │ Artefacto Final (.xlsx) │
-                                │ A4 Horizontal Print/View│
-                                └─────────────────────────┘
+El proyecto utiliza las herramientas de empaquetado modernas de Python (`pyproject.toml`).
+Se requiere **Python 3.12+**.
+
+```bash
+# Crear entorno virtual
+python -m venv venv
+
+# Activar entorno (Windows)
+.\venv\Scripts\activate
+
+# Instalar el proyecto en modo editable (con dependencias de desarrollo)
+pip install -e .[dev]
 ```
 
-## Stack Tecnológico
+### 2. Ejecutar la Aplicación (Desarrollo)
 
-- **Python 3.12:** Core del motor, tipado estático (typing) y heurística.
+Para probar la aplicación desde el código fuente:
 
-- **Openpyxl:** Manipulación a bajo nivel de XML de celdas para exportación editorial en A4, sin depender de motores ofimáticos instalados.
+```bash
+python src/interfaz_grafica.py
+```
 
-- **CustomTkinter:** Interfaz gráfica nativa con escalado DPI, modo oscuro y aceleración por hardware.
+### 3. Pruebas Automatizadas y Linter
 
-- **JSON:** Persistencia modular de estado y perfiles sin bases de datos pesadas (Portable I/O).
+El repositorio cuenta con cobertura de pruebas unitarias (`pytest`) y validación de estilo (`ruff`).
+
+```bash
+# Correr la suite de pruebas
+pytest tests/
+
+# Correr el linter
+ruff check .
+
+# Formatear el código automáticamente
+ruff format .
+```
+
+### 4. Compilación y Distribución (Build)
+
+Para crear un ejecutable portátil de Windows (`.exe`) que no requiere que el usuario final tenga Python instalado:
+
+```bash
+python build.py
+```
+
+El ejecutable finalizado y sus archivos de configuración necesarios (`data/` y `salida/`) se generarán en la carpeta `dist/GeneradorAsignaciones/`. Todo lo que se encuentre en esa carpeta puede ser distribuido como un paquete completo.
 
 ---
 
-## Datos locales y reglas de producto
+## 📁 Datos y Reglas de Negocio
 
-La lista real de hermanos **no se versiona**. Copia `data/hermanos.example.json` a `data/hermanos.json` y edita en el PC. Ese archivo, junto con `data/estado.json` y `data/ausencias.json`, queda fuera de git.
-
-**Semanas:** cada martes del mes abre una semana hasta el domingo (cinco días después). Si el domingo es del mes siguiente, igual entra en este programa.
-
-**Regenerar el mismo mes** no avanza los grupos de limpieza. Volver a un mes anterior después de haber generado otro sí puede desfasar la rotación (solo se recuerda el último mes).
-
-**Puestos incompletos** se exportan igual: la interfaz avisa en rojo y lista los huecos.
-
-No hay envío automático por WhatsApp. Los roles válidos están en `data/roles.txt` (`audio` y `video`; no `sonido`). El cargador lee ese archivo al validar `hermanos.json`.
+*   **Privacidad de Datos:** La lista real de hermanos (`hermanos.json`) y sus ausencias se ignoran en Git. Para empezar a usar el programa, simplemente copia `data/hermanos.example.json` a `data/hermanos.json` y configúralo con los datos reales.
+*   **Semanas:** Cada martes del mes abre una semana de programa hasta el domingo.
+*   **Ciclos Mensuales:** Regenerar el mismo mes no avanza los grupos de limpieza. Volver a un mes anterior puede desfasar la rotación, ya que el sistema solo almacena el último estado generado.
+*   **Alertas Visuales:** Si los recursos no son suficientes para cubrir los puestos de una semana, la interfaz gráfica alertará en texto rojo listando detalladamente los "huecos" o puestos vacíos. Estos igualmente se exportan al Excel en blanco para llenarlos a mano.
