@@ -67,6 +67,8 @@ La lista real de hermanos **no se versiona**. Copia `data/hermanos.example.json`
 
 **Semanas:** cada martes del mes abre una semana hasta el domingo (cinco días después). Si el domingo es del mes siguiente, igual entra en este programa.
 
-**Regenerar el mismo mes** no debe avanzar los grupos de limpieza; **puestos incompletos** se exportan con aviso. Esas dos reglas se implementan en la siguiente fase; el motor y el Excel aún no las aplican.
+**Regenerar el mismo mes** no avanza los grupos de limpieza. Volver a un mes anterior después de haber generado otro sí puede desfasar la rotación (solo se recuerda el último mes).
 
-No hay envío automático por WhatsApp. Los roles válidos están en `data/roles.txt` (`audio` y `video`; no `sonido`).
+**Puestos incompletos** se exportan igual: la interfaz avisa en rojo y lista los huecos.
+
+No hay envío automático por WhatsApp. Los roles válidos están en `data/roles.txt` (`audio` y `video`; no `sonido`). El cargador lee ese archivo al validar `hermanos.json`.

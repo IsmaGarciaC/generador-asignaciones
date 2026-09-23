@@ -13,6 +13,22 @@ PUESTOS_REQUERIDOS = {
 }
 
 
+def listar_puestos_incompletos(mes_asignaciones: dict[int, dict]) -> list[dict]:
+    """Puestos con menos personas que PUESTOS_REQUERIDOS en alguna semana."""
+    huecos = []
+    for semana, asignaciones in sorted(mes_asignaciones.items()):
+        for puesto, cantidad in PUESTOS_REQUERIDOS.items():
+            nombres = asignaciones.get(puesto, [])
+            if len(nombres) < cantidad:
+                huecos.append({
+                    "semana": semana,
+                    "puesto": puesto,
+                    "asignados": len(nombres),
+                    "requeridos": cantidad,
+                })
+    return huecos
+
+
 def filtrar_por_rol(hermanos: list[dict], rol: str) -> list[dict]:
     """Retorna los hermanos capacitados para un rol específico."""
     return [h for h in hermanos if rol in h["roles"]]
