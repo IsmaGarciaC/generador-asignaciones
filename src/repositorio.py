@@ -35,7 +35,7 @@ class Repositorio:
         roles = set()
         for linea in self.ruta_roles.read_text(encoding="utf-8").splitlines():
             token = linea.strip()
-            if not token:
+            if not token or token.startswith("#"):
                 continue
             if all(c.islower() or c == "_" for c in token):
                 roles.add(token)
