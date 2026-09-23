@@ -320,6 +320,34 @@ class AppAsignaciones(ctk.CTk):
         )
         self.btn_ausencias.grid(row=1, column=3, columnspan=2, padx=10, pady=(0, 15), sticky="w")
 
+        # Fila 3: Carpeta de Salida
+        lbl_salida = ctk.CTkLabel(frame_config, text="Guardar en:", font=ctk.CTkFont(weight="bold"))
+        lbl_salida.grid(row=2, column=0, padx=(20, 10), pady=(0, 15), sticky="w")
+
+        self.lbl_ruta_salida = ctk.CTkLabel(
+            frame_config,
+            text=str(self.carpeta_salida),
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            wraplength=250,
+            justify="left",
+        )
+        self.lbl_ruta_salida.grid(row=2, column=1, columnspan=2, padx=5, pady=(0, 15), sticky="w")
+
+        self.btn_cambiar_salida = ctk.CTkButton(
+            frame_config,
+            text="📂 Cambiar destino",
+            command=self._cambiar_carpeta_salida,
+            width=170,
+            fg_color="#2B2B2B",
+            hover_color="#333333",
+            border_width=1,
+            border_color="gray",
+        )
+        self.btn_cambiar_salida.grid(
+            row=2, column=3, columnspan=2, padx=10, pady=(0, 15), sticky="w"
+        )
+
         # 3. Botón de Acción Principal
         self.btn_generar = ctk.CTkButton(
             self,
@@ -374,6 +402,16 @@ class AppAsignaciones(ctk.CTk):
 
         self.txt_preview = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Consolas", size=11))
         self.txt_preview.pack(fill="both", expand=True, padx=25, pady=(0, 20))
+
+    def _cambiar_carpeta_salida(self):
+        from customtkinter import filedialog
+
+        carpeta = filedialog.askdirectory(
+            initialdir=str(self.carpeta_salida), title="Seleccionar carpeta para guardar el Excel"
+        )
+        if carpeta:
+            self.carpeta_salida = Path(carpeta)
+            self.lbl_ruta_salida.configure(text=str(self.carpeta_salida))
 
     def _al_cambiar_fecha(self):
         self._actualizar_info_semanas()
