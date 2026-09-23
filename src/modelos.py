@@ -14,18 +14,22 @@ class Hermano(BaseModel):
     def strip_nombre(cls, v: str) -> str:
         return v.strip()
 
+
 class EstadoMes(BaseModel):
     ultimo_anio: int
     ultimo_mes: int
     ultimo_grupo_limpieza: int
     siguiente_grupo_limpieza: int
 
+
 class AusenciasMes(BaseModel):
     # Clave: nombre del hermano, Valor: lista de semanas en las que está ausente
     ausencias: Dict[str, List[int]] = Field(default_factory=dict)
 
+
 class ReglasAsignacion(BaseModel):
     """Reglas y penalizaciones configurables para el motor heurístico."""
+
     penalizacion_rol_repetido_mes: int = 16
     penalizacion_semana_anterior: int = 3
     penalizacion_mismo_rol_semana_anterior: int = 10

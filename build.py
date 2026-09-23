@@ -1,6 +1,7 @@
 """
 Script de automatización para compilar el ejecutable portable con PyInstaller.
 """
+
 import shutil
 import subprocess
 import sys

@@ -15,7 +15,7 @@ FAMILIA_FUENTE = "Aptos"
 FUENTE_TITULO = Font(name=FAMILIA_FUENTE, size=14, bold=True, color="000000")
 FUENTE_HEADER = Font(name=FAMILIA_FUENTE, size=11, bold=True, color="000000")
 FUENTE_SEMANA_ORD = Font(name=FAMILIA_FUENTE, size=8.5, bold=False, color="000000")
-FUENTE_FECHA_SUB = Font(name=FAMILIA_FUENTE, size= 10, bold=True, color="000000")
+FUENTE_FECHA_SUB = Font(name=FAMILIA_FUENTE, size=10, bold=True, color="000000")
 FUENTE_SECCION = Font(name=FAMILIA_FUENTE, size=9.5, bold=True, color="000000")
 FUENTE_ETIQUETA = Font(name=FAMILIA_FUENTE, size=10, bold=True, color="000000")
 FUENTE_CELDA = Font(name=FAMILIA_FUENTE, size=10.5, color="000000")
@@ -83,11 +83,7 @@ def guardar_estado(anio: int, mes: int, ultimo_grupo: int, ruta_estado: str = "d
     """
     archivo = Path(ruta_estado)
     previo = _leer_estado(ruta_estado)
-    if (
-        previo is not None
-        and previo.get("ultimo_anio") == anio
-        and previo.get("ultimo_mes") == mes
-    ):
+    if previo is not None and previo.get("ultimo_anio") == anio and previo.get("ultimo_mes") == mes:
         return
 
     archivo.parent.mkdir(parents=True, exist_ok=True)
@@ -116,8 +112,19 @@ def calcular_semanas_mes(anio: int, mes: int) -> list[dict]:
     ]
 
     mes_corto = [
-        "", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
-        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+        "",
+        "Ene",
+        "Feb",
+        "Mar",
+        "Abr",
+        "May",
+        "Jun",
+        "Jul",
+        "Ago",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dic",
     ]
     ordinales = ["1ra . semana", "2da. semana", "3ra. semana", "4ta. semana", "5ta. semana"]
 
@@ -131,16 +138,17 @@ def calcular_semanas_mes(anio: int, mes: int) -> list[dict]:
         else:
             etiq_av = f"{mar.day:02d} {mes_corto[mar.month]} - {dom.day:02d} {mes_corto[dom.month]}"
             sub_fecha = (
-                f"{mar.day:02d} {mes_corto[mar.month]}. - "
-                f"{dom.day:02d} {mes_corto[dom.month]}."
+                f"{mar.day:02d} {mes_corto[mar.month]}. - {dom.day:02d} {mes_corto[dom.month]}."
             )
 
-        semanas.append({
-            "semana": idx + 1,
-            "ordinal": ordinales[idx],
-            "fecha_semana": sub_fecha,
-            "audio_video": etiq_av,
-        })
+        semanas.append(
+            {
+                "semana": idx + 1,
+                "ordinal": ordinales[idx],
+                "fecha_semana": sub_fecha,
+                "audio_video": etiq_av,
+            }
+        )
 
     return semanas
 
@@ -168,8 +176,19 @@ def exportar_programa_excel(
     num_semanas = len(semanas)
 
     nombres_meses = [
-        "", "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
+        "",
+        "ENERO",
+        "FEBRERO",
+        "MARZO",
+        "ABRIL",
+        "MAYO",
+        "JUNIO",
+        "JULIO",
+        "AGOSTO",
+        "SEPTIEMBRE",
+        "OCTUBRE",
+        "NOVIEMBRE",
+        "DICIEMBRE",
     ]
     nombre_mes_str = nombres_meses[mes]
 
@@ -233,7 +252,6 @@ def exportar_programa_excel(
 
     # 3. FILAS Y SECCIONES UNIFICADAS
     estructura_tabla = [
-
         # SECCIÓN 1: AUDITORIO Y SALA
         (True, "AUDITORIO Y PLATAFORMA", None, 24),
         (False, "Acomodadores", "acomodador", 45),
@@ -241,13 +259,11 @@ def exportar_programa_excel(
         (False, "Micrófonos", "microfonos", 45),
         (False, "Limpieza del Salón", "limpieza", 30),
         (False, "Hospitalidad", "hospitalidad", 30),
-
         # SECCIÓN 2: PLATAFORMA Y LECTURAS
         (True, "PRESIDENCIA Y LECTURAS", None, 24),
         (False, "Lector Estudio Bíblico", "lector_martes", 30),
         (False, "Presidente", "presidente", 30),
         (False, "Lector de La Atalaya", "lector_domingo", 30),
-
     ]
 
     r_actual = 4
@@ -363,5 +379,5 @@ def exportar_programa_excel(
         "ruta_excel": str(ruta.resolve()),
         "num_semanas": num_semanas,
         "rango_tabla": f"A1:{col_fin}{fila_fin}",
-        "hoja": "Programa General"
+        "hoja": "Programa General",
     }

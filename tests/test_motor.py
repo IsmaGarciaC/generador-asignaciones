@@ -65,9 +65,7 @@ def test_valvula_emergencia_lector_martes():
         Hermano(id=2, nombre="Hermano Audio", roles=["audio"]),
     ]
     # Reglas donde solo requerimos microfonos y lector_martes
-    reglas = ReglasAsignacion(
-        puestos_requeridos={"microfonos": 1, "lector_martes": 1}
-    )
+    reglas = ReglasAsignacion(puestos_requeridos={"microfonos": 1, "lector_martes": 1})
     motor = MotorAsignacion(hermanos=hermanos, reglas=reglas, seed=1)
     mes = motor.generar_mes(num_semanas=1)
 

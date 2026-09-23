@@ -69,16 +69,16 @@ class Repositorio:
             except ValidationError as e:
                 logger.error("Error de validación Pydantic en persona #%d: %s", idx + 1, e)
                 raise DatosInvalidosError(
-                    f"Persona #{idx+1}: Error de formato. Revisa los campos requeridos."
+                    f"Persona #{idx + 1}: Error de formato. Revisa los campos requeridos."
                 ) from e
 
             if hermano.id in ids_vistos:
-                raise DatosInvalidosError(f"Persona #{idx+1}: el id {hermano.id} está duplicado.")
+                raise DatosInvalidosError(f"Persona #{idx + 1}: el id {hermano.id} está duplicado.")
             ids_vistos.add(hermano.id)
 
             if hermano.nombre in nombres_vistos:
                 raise DatosInvalidosError(
-                    f"Persona #{idx+1}: el nombre '{hermano.nombre}' está duplicado."
+                    f"Persona #{idx + 1}: el nombre '{hermano.nombre}' está duplicado."
                 )
             nombres_vistos.add(hermano.nombre)
 

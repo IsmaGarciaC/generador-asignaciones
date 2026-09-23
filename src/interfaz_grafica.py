@@ -23,8 +23,18 @@ ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 MESES = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
 ]
 
 ETIQUETAS_PUESTO = {
@@ -450,9 +460,7 @@ class AppAsignaciones(ctk.CTk):
 
             # Generar motor aplicando ausencias
             motor = MotorAsignacion(hermanos=hermanos)
-            asignaciones = motor.generar_mes(
-                num_semanas=len(semanas), ausencias=ausencias_motor
-            )
+            asignaciones = motor.generar_mes(num_semanas=len(semanas), ausencias=ausencias_motor)
 
             nombre_sugerido = f"programa_{mes_str.lower()}_{anio}"
             ruta_xlsx = self.carpeta_salida / f"{nombre_sugerido}.xlsx"
@@ -509,8 +517,7 @@ class AppAsignaciones(ctk.CTk):
             for h in huecos:
                 etiqueta = ETIQUETAS_PUESTO.get(h["puesto"], h["puesto"])
                 lineas.append(
-                    f"  • Semana {h['semana']}: {etiqueta} "
-                    f"({h['asignados']} de {h['requeridos']})"
+                    f"  • Semana {h['semana']}: {etiqueta} ({h['asignados']} de {h['requeridos']})"
                 )
             lineas.append("")
 

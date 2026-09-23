@@ -8,7 +8,7 @@ def obtener_ruta_base() -> Path:
     Obtiene la ruta base del ejecutable o del script.
     Esto permite que el programa sea portable al compilarse con PyInstaller.
     """
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Si está congelado por PyInstaller, sys.executable apunta al .exe
         return Path(sys.executable).parent
     else:
@@ -16,7 +16,9 @@ def obtener_ruta_base() -> Path:
         # El padre del padre es el directorio raíz del proyecto
         return Path(__file__).resolve().parent.parent
 
+
 BASE_DIR = obtener_ruta_base()
+
 
 def configurar_logging():
     """
@@ -30,7 +32,7 @@ def configurar_logging():
     # Evitar handlers duplicados si se llama varias veces
     if not logger.handlers:
         # File handler (INFO y superior al archivo)
-        fh = logging.FileHandler(log_file, encoding='utf-8')
+        fh = logging.FileHandler(log_file, encoding="utf-8")
         fh.setLevel(logging.INFO)
 
         # Console handler (DEBUG y superior a consola)
@@ -38,8 +40,7 @@ def configurar_logging():
         ch.setLevel(logging.DEBUG)
 
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         fh.setFormatter(formatter)
         ch.setFormatter(formatter)
@@ -48,5 +49,6 @@ def configurar_logging():
         logger.addHandler(ch)
 
     return logger
+
 
 logger = configurar_logging()
