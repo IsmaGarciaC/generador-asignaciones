@@ -40,22 +40,55 @@ def aplicar_borde_rango(ws, r_ini: int, r_fin: int, c_ini: int, c_fin: int, bord
             ws.cell(row=r, column=c).border = borde
 
 
+def _leer_estado(ruta_estado: str) -> dict | None:
+    archivo = Path(ruta_estado)
+    if not archivo.exists():
+        return None
+    try:
+        with open(archivo, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def obtener_siguiente_grupo(ruta_estado: str = "data/estado.json") -> int:
     """Lee el grupo de limpieza que corresponde a la primera semana del siguiente mes."""
-    archivo = Path(ruta_estado)
-    if archivo.exists():
-        try:
-            with open(archivo, "r", encoding="utf-8") as f:
-                datos = json.load(f)
-                return datos.get("siguiente_grupo_limpieza", 1)
-        except Exception:
-            return 1
-    return 1
+    datos = _leer_estado(ruta_estado)
+    if datos is None:
+        return 1
+    return int(datos.get("siguiente_grupo_limpieza", 1) or 1)
+
+
+def grupo_sugerido_para_mes(anio: int, mes: int, ruta_estado: str = "data/estado.json") -> int:
+    """Grupo de inicio del mes seleccionado, o el siguiente guardado si es un mes nuevo."""
+    datos = _leer_estado(ruta_estado)
+    if datos is None:
+        return 1
+
+    if datos.get("ultimo_anio") == anio and datos.get("ultimo_mes") == mes:
+        ultimo = int(datos.get("ultimo_grupo_limpieza", 1) or 1)
+        num_semanas = len(calcular_semanas_mes(anio, mes))
+        return ((ultimo - 1 - (num_semanas - 1)) % 4) + 1
+
+    return int(datos.get("siguiente_grupo_limpieza", 1) or 1)
 
 
 def guardar_estado(anio: int, mes: int, ultimo_grupo: int, ruta_estado: str = "data/estado.json"):
-    """Guarda en memoria el estado para la rotación automática de los 4 grupos."""
+    """Persiste la rotación de los 4 grupos. Regenerar el mismo mes no avanza la rueda.
+
+    Solo se recuerda el último mes generado: volver a un mes anterior después de
+    haber generado otro sí puede desfasar la rotación.
+    """
     archivo = Path(ruta_estado)
+    previo = _leer_estado(ruta_estado)
+    if (
+        previo is not None
+        and previo.get("ultimo_anio") == anio
+        and previo.get("ultimo_mes") == mes
+    ):
+        return
+
     archivo.parent.mkdir(parents=True, exist_ok=True)
     siguiente_grupo = (ultimo_grupo % 4) + 1
     datos = {

@@ -9,12 +9,12 @@ import customtkinter as ctk
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR / "src"))
 
-from cargador_datos import cargar_hermanos
-from motor_asignacion import generar_mes
+from cargador_datos import DatosInvalidosError, cargar_hermanos
+from motor_asignacion import generar_mes, listar_puestos_incompletos
 from exportador_excel import (
     calcular_semanas_mes,
     exportar_programa_excel,
-    obtener_siguiente_grupo,
+    grupo_sugerido_para_mes,
 )
 
 ctk.set_appearance_mode("System")
@@ -24,6 +24,17 @@ MESES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
+
+ETIQUETAS_PUESTO = {
+    "presidente": "Presidente",
+    "lector_domingo": "Lector de La Atalaya",
+    "audio": "Audio",
+    "video": "Video",
+    "plataforma": "Plataforma",
+    "lector_martes": "Lector Estudio Bíblico",
+    "microfonos": "Micrófonos",
+    "acomodador": "Acomodadores",
+}
 
 
 class VentanaAusencias(ctk.CTkToplevel):
@@ -290,7 +301,9 @@ class AppAsignaciones(ctk.CTk):
         lbl_grupo = ctk.CTkLabel(frame_config, text="Limpieza inicial:", font=ctk.CTkFont(weight="bold"))
         lbl_grupo.grid(row=1, column=0, padx=(20, 10), pady=(0, 15), sticky="w")
 
-        siguiente_sugerido = obtener_siguiente_grupo(str(self.ruta_estado))
+        siguiente_sugerido = grupo_sugerido_para_mes(
+            anio_defecto, mes_defecto, str(self.ruta_estado)
+        )
         self.combo_grupo = ctk.CTkOptionMenu(
             frame_config,
             values=["Grupo # 1", "Grupo # 2", "Grupo # 3", "Grupo # 4"],
@@ -323,7 +336,9 @@ class AppAsignaciones(ctk.CTk):
         self.lbl_estado = ctk.CTkLabel(
             self,
             text="Listo para generar asignaciones.",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=12),
+            wraplength=740,
+            justify="left",
         )
         self.lbl_estado.pack(padx=25, pady=(0, 10))
 
@@ -364,6 +379,7 @@ class AppAsignaciones(ctk.CTk):
 
     def _al_cambiar_fecha(self):
         self._actualizar_info_semanas()
+        self._actualizar_grupo_sugerido()
         self.actualizar_conteo_ausencias()
 
     def _actualizar_info_semanas(self):
@@ -371,6 +387,12 @@ class AppAsignaciones(ctk.CTk):
         mes_idx = MESES.index(self.combo_mes.get()) + 1
         semanas = calcular_semanas_mes(anio, mes_idx)
         self.lbl_semanas_detectadas.configure(text=f"• {len(semanas)} semanas (martes a domingo)")
+
+    def _actualizar_grupo_sugerido(self):
+        anio = int(self.combo_anio.get())
+        mes_idx = MESES.index(self.combo_mes.get()) + 1
+        grupo = grupo_sugerido_para_mes(anio, mes_idx, str(self.ruta_estado))
+        self.combo_grupo.set(f"Grupo # {grupo}")
 
     def actualizar_conteo_ausencias(self):
         anio = int(self.combo_anio.get())
@@ -422,6 +444,8 @@ class AppAsignaciones(ctk.CTk):
                 num_semanas=len(semanas),
                 ruta_ausencias=self.ruta_ausencias
             )
+        except DatosInvalidosError as e:
+            self.lbl_estado.configure(text=f"❌ {e}", text_color="#DC3545")
         except Exception as e:
             self.lbl_estado.configure(text=f"❌ Error al cargar hermanos: {e}", text_color="#DC3545")
 
@@ -462,22 +486,45 @@ class AppAsignaciones(ctk.CTk):
             self.btn_abrir_excel.configure(state="normal")
             self.btn_abrir_carpeta.configure(state="normal")
 
-            self.lbl_estado.configure(
-                text="✅ ¡Programa generado respetando ausencias! Presiona 'Abrir en ONLYOFFICE'.",
-                text_color="#28A745"
-            )
+            huecos = listar_puestos_incompletos(asignaciones)
+            self.combo_grupo.set(f"Grupo # {grupo_seleccionado}")
 
-            siguiente = obtener_siguiente_grupo(str(self.ruta_estado))
-            self.combo_grupo.set(f"Grupo # {siguiente}")
+            if huecos:
+                resumen_huecos = "; ".join(
+                    f"Sem {h['semana']} {ETIQUETAS_PUESTO.get(h['puesto'], h['puesto'])} "
+                    f"({h['asignados']}/{h['requeridos']})"
+                    for h in huecos
+                )
+                self.lbl_estado.configure(
+                    text=f"⚠️ Programa exportado con puestos incompletos: {resumen_huecos}",
+                    text_color="#DC3545",
+                )
+            else:
+                self.lbl_estado.configure(
+                    text="✅ ¡Programa generado respetando ausencias! Presiona 'Abrir en ONLYOFFICE'.",
+                    text_color="#28A745",
+                )
 
-            self._mostrar_resumen(asignaciones, semanas, mes_str, anio)
+            self._mostrar_resumen(asignaciones, semanas, mes_str, anio, huecos)
 
+        except DatosInvalidosError as e:
+            self.lbl_estado.configure(text=f"❌ {e}", text_color="#DC3545")
         except Exception as e:
             self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
 
-    def _mostrar_resumen(self, asignaciones, semanas, mes_str, anio):
+    def _mostrar_resumen(self, asignaciones, semanas, mes_str, anio, huecos=None):
         self.txt_preview.delete("1.0", "end")
         lineas = [f"=== RESUMEN ASIGNACIONES - {mes_str.upper()} {anio} ===", ""]
+
+        if huecos:
+            lineas.append("PUESTOS INCOMPLETOS:")
+            for h in huecos:
+                etiqueta = ETIQUETAS_PUESTO.get(h["puesto"], h["puesto"])
+                lineas.append(
+                    f"  • Semana {h['semana']}: {etiqueta} "
+                    f"({h['asignados']} de {h['requeridos']})"
+                )
+            lineas.append("")
 
         for s in semanas:
             num = s["semana"]
