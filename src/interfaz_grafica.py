@@ -261,6 +261,15 @@ class VentanaRecordatorios(ctk.CTkToplevel):
         )
         self.combo_semana.pack(side="left", padx=5)
 
+        self.btn_enviar_todos = ctk.CTkButton(
+            frame_sem,
+            text="Enviar a Todos",
+            fg_color="#25D366",
+            hover_color="#128C7E",
+            command=self._enviar_wa_masivo,
+        )
+        self.btn_enviar_todos.pack(side="left", padx=10)
+
         self.frame_lista = ctk.CTkScrollableFrame(self)
         self.frame_lista.pack(fill="both", expand=True, padx=20, pady=15)
 
@@ -331,6 +340,44 @@ class VentanaRecordatorios(ctk.CTkToplevel):
         )
         url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
         webbrowser.open(url)
+
+    def _enviar_wa_masivo(self):
+        sel = self.combo_semana.get()
+        if not self.asignaciones or not sel:
+            return
+
+        idx = int(sel.split(" ")[1])
+        fecha_semana = sel.split(" - ", 1)[1] if " - " in sel else ""
+        asigs_semana = self.asignaciones.get(idx, {})
+
+        import threading
+        import time
+        import urllib.parse
+        import webbrowser
+
+        def enviar_lote():
+            self.btn_enviar_todos.configure(state="disabled", text="Enviando...")
+            try:
+                for rol, nombres in asigs_semana.items():
+                    if rol in ("limpieza", "hospitalidad"):
+                        continue
+
+                    rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
+                    for nombre in nombres:
+                        telf = self.telefonos.get(nombre, "")
+                        if telf:
+                            fecha_str = f" ({fecha_semana})" if fecha_semana else ""
+                            msg = (
+                                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de *{rol_etiqueta}* "
+                                f"para esta semana{fecha_str} en la reunión. ¡Gracias por su disposición, y buen trabajo!"
+                            )
+                            url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
+                            webbrowser.open(url)
+                            time.sleep(1.5)  # Breve pausa para no saturar al navegador
+            finally:
+                self.btn_enviar_todos.configure(state="normal", text="Enviar a Todos")
+
+        threading.Thread(target=enviar_lote, daemon=True).start()
 
 
 class VentanaEdicionAsignaciones(ctk.CTkToplevel):
