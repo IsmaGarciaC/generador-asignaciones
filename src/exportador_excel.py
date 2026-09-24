@@ -1,6 +1,7 @@
 import calendar
 import datetime
 from pathlib import Path
+from typing import Optional
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
