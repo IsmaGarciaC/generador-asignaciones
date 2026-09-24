@@ -280,6 +280,7 @@ class VentanaRecordatorios(ctk.CTkToplevel):
             return
 
         idx = int(sel.split(" ")[1])
+        fecha_semana = sel.split(" - ", 1)[1] if " - " in sel else ""
         asigs_semana = self.asignaciones.get(idx, {})
 
         # Crear lista
@@ -310,20 +311,21 @@ class VentanaRecordatorios(ctk.CTkToplevel):
                         width=100,
                         fg_color="#25D366",
                         hover_color="#128C7E",
-                        command=lambda n=nombre, r=rol_etiqueta, t=telf: self._enviar_wa(n, r, t),
+                        command=lambda n=nombre, r=rol_etiqueta, t=telf, f=fecha_semana: self._enviar_wa(n, r, t, f),
                     )
                     btn.pack(side="right", padx=10, pady=5)
                 else:
                     lbl_t = ctk.CTkLabel(f_item, text="Sin teléfono", text_color="#DC3545")
                     lbl_t.pack(side="right", padx=10, pady=5)
 
-    def _enviar_wa(self, nombre: str, rol: str, telf: str):
+    def _enviar_wa(self, nombre: str, rol: str, telf: str, fecha: str = ""):
         import urllib.parse
         import webbrowser
 
+        fecha_str = f" ({fecha})" if fecha else ""
         msg = (
-            f"Hola {nombre}, te recordamos tu asignación de *{rol}* "
-            "para esta semana en la reunión. ¡Gracias por tu disposición!"
+            f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de *{rol}* "
+            f"para esta semana{fecha_str} en la reunión. ¡Gracias por su disposición, y buen trabajo!"
         )
         url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
         webbrowser.open(url)
