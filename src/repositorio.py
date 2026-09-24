@@ -16,7 +16,7 @@ class DatosInvalidosError(ValueError):
 
 
 class Repositorio:
-    def __init__(self, data_dir: Path = None):
+    def __init__(self, data_dir: Optional[Path] = None):
         self.data_dir = data_dir or (BASE_DIR / "data")
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

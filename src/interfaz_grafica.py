@@ -75,7 +75,7 @@ class VentanaAusencias(ctk.CTkToplevel):
         self.num_semanas = num_semanas
 
         self.ausencias_mes = self.repo.leer_ausencias_mes(self.anio, self.mes_idx)
-        self.checkboxes_semanas = []
+        self.checkboxes_semanas: list[ctk.CTkCheckBox] = []
 
         self._construir_ui()
 
@@ -311,7 +311,9 @@ class VentanaRecordatorios(ctk.CTkToplevel):
                         width=100,
                         fg_color="#25D366",
                         hover_color="#128C7E",
-                        command=lambda n=nombre, r=rol_etiqueta, t=telf, f=fecha_semana: self._enviar_wa(n, r, t, f),
+                        command=lambda n=nombre, r=rol_etiqueta, t=telf, f=fecha_semana: (
+                            self._enviar_wa(n, r, t, f)
+                        ),
                     )
                     btn.pack(side="right", padx=10, pady=5)
                 else:
@@ -329,6 +331,197 @@ class VentanaRecordatorios(ctk.CTkToplevel):
         )
         url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
         webbrowser.open(url)
+
+
+class VentanaEdicionAsignaciones(ctk.CTkToplevel):
+    def __init__(
+        self,
+        parent,
+        repo: Repositorio,
+        anio: int,
+        mes: int,
+        semanas: list,
+        asignaciones: dict,
+        grupo_limpieza: int,
+        reglas: ReglasAsignacion,
+    ):
+        super().__init__(parent)
+        self.title(f"Editar Asignaciones - Mes {mes}/{anio}")
+        self.geometry("800x650")
+        self.grab_set()
+
+        self.parent_app = parent
+        self.repo = repo
+        self.anio = anio
+        self.mes = mes
+        self.semanas = semanas
+        self.asignaciones = asignaciones or {}
+        self.grupo_limpieza = grupo_limpieza
+        self.reglas = reglas
+
+        self.hermanos = self.repo.cargar_hermanos()
+        self.candidatos_por_rol = {
+            rol: ["—"] + [h.nombre for h in self.hermanos if rol in h.roles]
+            for rol in self.reglas.puestos_requeridos.keys()
+        }
+
+        self.comboboxes: dict[tuple[int, str, int], ctk.CTkComboBox] = {}  # (semana_idx, rol, indice): widget
+        self.semana_activa = None
+
+        self._construir_ui()
+
+    def _construir_ui(self):
+        lbl_tit = ctk.CTkLabel(
+            self, text="Modificar Programa Generado", font=ctk.CTkFont(size=18, weight="bold")
+        )
+        lbl_tit.pack(pady=(15, 5))
+
+        lbl_info = ctk.CTkLabel(
+            self,
+            text="Al guardar los cambios aquí, se actualizarán los mensajes de WhatsApp automáticamente y se exportará un nuevo archivo Excel.",
+            text_color="gray",
+            wraplength=650,
+        )
+        lbl_info.pack(pady=(0, 15))
+
+        frame_sem = ctk.CTkFrame(self, fg_color="transparent")
+        frame_sem.pack(pady=5)
+
+        ctk.CTkLabel(frame_sem, text="Semana:", font=ctk.CTkFont(weight="bold")).pack(
+            side="left", padx=5
+        )
+
+        self.combo_semana = ctk.CTkOptionMenu(
+            frame_sem,
+            values=[f"Semana {s['semana']} - {s['fecha_semana']}" for s in self.semanas],
+            command=self._al_cambiar_semana,
+        )
+        self.combo_semana.pack(side="left", padx=5)
+
+        self.frame_lista = ctk.CTkScrollableFrame(self)
+        self.frame_lista.pack(fill="both", expand=True, padx=20, pady=10)
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=15)
+
+        btn_guardar = ctk.CTkButton(
+            btn_frame,
+            text="💾 Guardar y Regenerar Excel",
+            font=ctk.CTkFont(weight="bold"),
+            command=self._guardar_cambios,
+        )
+        btn_guardar.pack(side="right", padx=5)
+
+        if self.asignaciones:
+            self._al_cambiar_semana(self.combo_semana.get())
+        else:
+            ctk.CTkLabel(self.frame_lista, text="No hay asignaciones para este mes.").pack(pady=20)
+
+    def _guardar_estado_semana_actual(self):
+        if self.semana_activa is None or not self.comboboxes:
+            return
+
+        sem_idx = self.semana_activa
+        asigs_semana = self.asignaciones.setdefault(sem_idx, {})
+
+        for rol, cantidad in self.reglas.puestos_requeridos.items():
+            if rol in ("limpieza", "hospitalidad"):
+                continue
+
+            nuevos_nombres = []
+            for i in range(cantidad):
+                cb = self.comboboxes.get((sem_idx, rol, i))
+                if cb:
+                    val = cb.get()
+                    if val != "—":
+                        nuevos_nombres.append(val)
+
+            asigs_semana[rol] = nuevos_nombres
+
+    def _al_cambiar_semana(self, sel: str):
+        self._guardar_estado_semana_actual()
+
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
+
+        self.comboboxes.clear()
+
+        if not self.asignaciones:
+            return
+
+        sem_idx = int(sel.split(" ")[1])
+        self.semana_activa = sem_idx
+        asigs_semana = self.asignaciones.get(sem_idx, {})
+
+        for rol, cantidad in self.reglas.puestos_requeridos.items():
+            if rol in ("limpieza", "hospitalidad"):
+                continue
+
+            rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
+            nombres_actuales = asigs_semana.get(rol, [])
+
+            f_row = ctk.CTkFrame(self.frame_lista)
+            f_row.pack(fill="x", pady=4, padx=5)
+
+            lbl_r = ctk.CTkLabel(
+                f_row, text=rol_etiqueta, width=150, anchor="w", font=ctk.CTkFont(weight="bold")
+            )
+            lbl_r.pack(side="left", padx=10, pady=5)
+
+            for i in range(cantidad):
+                nombre_actual = nombres_actuales[i] if i < len(nombres_actuales) else "—"
+                cb = ctk.CTkComboBox(f_row, values=self.candidatos_por_rol[rol], width=200)
+                if nombre_actual in self.candidatos_por_rol[rol]:
+                    cb.set(nombre_actual)
+                else:
+                    cb.set("—")
+                cb.pack(side="left", padx=5, pady=5)
+
+                self.comboboxes[(sem_idx, rol, i)] = cb
+
+    def _guardar_cambios(self):
+        self._guardar_estado_semana_actual()
+
+        # Guardar en base de datos
+        self.repo.guardar_asignaciones_mes(self.anio, self.mes, self.asignaciones)
+
+        # Regenerar Excel
+        ruta_salida = self.parent_app.ultimo_excel or (
+            self.parent_app.carpeta_salida
+            / f"programa_{MESES[self.mes - 1].lower()}_{self.anio}.xlsx"
+        )
+
+        try:
+            exportar_programa_excel(
+                mes_asignaciones=self.asignaciones,
+                anio=self.anio,
+                mes=self.mes,
+                grupo_inicio_limpieza=self.grupo_limpieza,
+                ruta_salida=str(ruta_salida),
+                reglas=self.reglas,
+            )
+            self.parent_app.ultimo_excel = ruta_salida
+
+            huecos = MotorAsignacion(
+                hermanos=self.hermanos, reglas=self.reglas
+            ).listar_puestos_incompletos(self.asignaciones)
+            self.parent_app._mostrar_resumen(
+                self.asignaciones, self.semanas, MESES[self.mes - 1], self.anio, huecos
+            )
+
+            self.parent_app.lbl_estado.configure(
+                text="✅ Cambios manuales guardados y Excel regenerado exitosamente.",
+                text_color="#28A745",
+            )
+            self.destroy()
+        except Exception as e:
+            from configuracion import logger
+
+            logger.exception("Error al regenerar excel tras edición: %s", e)
+            self.parent_app.lbl_estado.configure(
+                text=f"❌ Error al guardar y exportar: {e}", text_color="#DC3545"
+            )
+            self.destroy()
 
 
 class AppAsignaciones(ctk.CTk):
@@ -495,26 +688,36 @@ class AppAsignaciones(ctk.CTk):
             hover_color="#0B5C30",
             command=self._abrir_excel,
         )
-        self.btn_abrir_excel.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        self.btn_abrir_excel.pack(side="left", expand=True, fill="x", padx=(0, 2))
+
+        self.btn_editar_asig = ctk.CTkButton(
+            self.frame_acciones,
+            text="📝 Editar Programa",
+            state="disabled",
+            fg_color="#D4AC0D",
+            hover_color="#B7950B",
+            command=self._abrir_ventana_edicion,
+        )
+        self.btn_editar_asig.pack(side="left", expand=True, fill="x", padx=2)
 
         self.btn_abrir_carpeta = ctk.CTkButton(
             self.frame_acciones,
-            text="📁 Abrir Carpeta de Salida",
+            text="📁 Abrir Carpeta",
             state="disabled",
             fg_color="#5A6268",
             hover_color="#43494E",
             command=self._abrir_carpeta,
         )
-        self.btn_abrir_carpeta.pack(side="left", expand=True, fill="x", padx=5)
+        self.btn_abrir_carpeta.pack(side="left", expand=True, fill="x", padx=2)
 
         self.btn_recordatorios = ctk.CTkButton(
             self.frame_acciones,
-            text="🔔 Recordatorios WhatsApp",
+            text="🔔 Recordatorios",
             fg_color="#25D366",
             hover_color="#128C7E",
             command=self._abrir_ventana_recordatorios,
         )
-        self.btn_recordatorios.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        self.btn_recordatorios.pack(side="left", expand=True, fill="x", padx=(2, 0))
 
         # 6. Vista previa de resultados
         lbl_preview = ctk.CTkLabel(
@@ -576,7 +779,7 @@ class AppAsignaciones(ctk.CTk):
     def _obtener_mapa_ausencias_motor(self, anio: int, mes_idx: int) -> dict[int, list[str]]:
         """Convierte {nombre: [semanas]} a {semana_int: [lista_nombres]} para el motor."""
         mes_data = self.repo.leer_ausencias_mes(anio, mes_idx)
-        mapa_semanas = {}
+        mapa_semanas: dict[int, list[str]] = {}
         for nombre, sems in mes_data.items():
             for s in sems:
                 mapa_semanas.setdefault(int(s), []).append(nombre)
@@ -624,6 +827,34 @@ class AppAsignaciones(ctk.CTk):
             )
         except Exception as e:
             logger.exception("Error al abrir ventana de recordatorios: %s", e)
+            self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
+
+    def _abrir_ventana_edicion(self):
+        anio = int(self.combo_anio.get())
+        mes_idx = MESES.index(self.combo_mes.get()) + 1
+        semanas = calcular_semanas_mes(anio, mes_idx)
+        asignaciones = self.repo.leer_asignaciones_mes(anio, mes_idx)
+        grupo = int(self.combo_grupo.get().replace("Grupo # ", ""))
+
+        if not asignaciones:
+            self.lbl_estado.configure(
+                text="❌ No hay asignaciones guardadas para editar.", text_color="#DC3545"
+            )
+            return
+
+        try:
+            VentanaEdicionAsignaciones(
+                parent=self,
+                repo=self.repo,
+                anio=anio,
+                mes=mes_idx,
+                semanas=semanas,
+                asignaciones=asignaciones,
+                grupo_limpieza=grupo,
+                reglas=_reglas,
+            )
+        except Exception as e:
+            logger.exception("Error al abrir ventana de edición: %s", e)
             self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
 
     def _ejecutar_generacion(self):
@@ -680,6 +911,7 @@ class AppAsignaciones(ctk.CTk):
 
             self.btn_abrir_excel.configure(state="normal")
             self.btn_abrir_carpeta.configure(state="normal")
+            self.btn_editar_asig.configure(state="normal")
 
             huecos = motor.listar_puestos_incompletos(asignaciones)
             self.combo_grupo.set(f"Grupo # {grupo_seleccionado}")
@@ -716,7 +948,7 @@ class AppAsignaciones(ctk.CTk):
         semanas: List[dict],
         mes_str: str,
         anio: int,
-        huecos: Optional[List[dict]] = None
+        huecos: Optional[List[dict]] = None,
     ) -> None:
         self.txt_preview.delete("1.0", "end")
         lineas = [f"=== RESUMEN ASIGNACIONES - {mes_str.upper()} {anio} ===", ""]
