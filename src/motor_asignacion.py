@@ -68,11 +68,15 @@ class MotorAsignacion:
         nombre = hermano.nombre
         registro = self.historial_carga[nombre]
 
-        # Base de carga según el tipo de labor
+        # 1. Base de carga unificada: siempre usamos la carga global
+        # Multiplicamos por 2 para que el balance total del mes tenga más peso (rotación más equitativa).
+        puntos = registro["global"] * 2
+
+        # 2. Equilibrio interno para cabina:
+        # Si es un puesto técnico, penalizamos adicionalmente si ya ha hecho cabina,
+        # para rotarlos internamente, pero sin ignorar su carga global previa.
         if puesto in ["audio", "video"]:
-            puntos = registro["cabina"]
-        else:
-            puntos = registro["global"]
+            puntos += registro["cabina"] * 2
 
         # 1. Penalización si ya hizo este rol específico en el mes
         if puesto in registro["roles_mes"]:
