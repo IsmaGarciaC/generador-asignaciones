@@ -6,13 +6,18 @@ from pydantic import BaseModel, Field, field_validator
 class Hermano(BaseModel):
     id: int = Field(..., ge=1)
     nombre: str = Field(..., min_length=1)
-    telefono: str = ""
+    telefono: str = Field(default="", pattern=r"^\+?[\d\s\-()]*$")
     roles: Set[str] = Field(..., min_length=1)
 
     @field_validator("nombre", mode="before")
     @classmethod
     def strip_nombre(cls, v: str) -> str:
-        return v.strip() if isinstance(v, str) else v
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith(('=', '+', '-', '@')):
+                v = f"'{v}"
+            return v
+        return v
 
 
 class EstadoMes(BaseModel):

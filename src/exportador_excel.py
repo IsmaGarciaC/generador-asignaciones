@@ -35,6 +35,15 @@ ALINEACION_CENTRO = Alignment(horizontal="center", vertical="center", wrap_text=
 ALINEACION_IZQ = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
 
+def sanitizar_celda(texto: str) -> str:
+    """Evita la inyección de fórmulas CSV/Excel en celdas de texto."""
+    if not isinstance(texto, str) or not texto:
+        return texto
+    if str(texto).startswith(('=', '+', '-', '@', '\t', '\r')):
+        return f"'{texto}"
+    return texto
+
+
 def aplicar_borde_rango(ws, r_ini: int, r_fin: int, c_ini: int, c_fin: int, borde: Border):
     """Asegura que todas las celdas de un bloque tengan sus cuatro bordes cerrados."""
     for r in range(r_ini, r_fin + 1):
@@ -103,6 +112,7 @@ def exportar_programa_excel(
     mes: int,
     grupo_inicio_limpieza: int,
     ruta_salida: str = "salida/programa_mes.xlsx",
+    reglas: ReglasAsignacion = None,
 ) -> dict:
     """
     Genera el archivo Excel optimizado:
@@ -190,7 +200,7 @@ def exportar_programa_excel(
     ws_gen.row_dimensions[2].height = 18
     ws_gen.row_dimensions[3].height = 25
 
-    _reglas = ReglasAsignacion()
+    _reglas = reglas or ReglasAsignacion()
     r_actual = 4
     for item in _reglas.estructura_programa:
         es_sec = item["es_seccion"]
@@ -234,7 +244,7 @@ def exportar_programa_excel(
                     nombres = mes_asignaciones.get(s_idx, {}).get(key, [])
                     val = "\n".join(nombres) if nombres else "—"
 
-                c = ws_gen.cell(row=r_actual, column=s_idx + 1, value=val)
+                c = ws_gen.cell(row=r_actual, column=s_idx + 1, value=sanitizar_celda(val))
                 c.font = FUENTE_CELDA
                 c.alignment = ALINEACION_CENTRO
                 c.border = BORDE_NEGRO
@@ -286,7 +296,7 @@ def exportar_programa_excel(
         for s_idx in range(1, num_semanas + 1):
             nombres = mes_asignaciones.get(s_idx, {}).get(key, [])
             val = "\n".join(nombres) if nombres else "—"
-            cn = ws_av.cell(row=r_idx, column=s_idx + 1, value=val)
+            cn = ws_av.cell(row=r_idx, column=s_idx + 1, value=sanitizar_celda(val))
             cn.font = FUENTE_CELDA
             cn.alignment = ALINEACION_CENTRO
             cn.border = BORDE_NEGRO

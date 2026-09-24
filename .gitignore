@@ -25,3 +25,6 @@ generador.log
 build/
 dist/
 *.spec
+
+# Antigravity y Agentes
+.agent/
