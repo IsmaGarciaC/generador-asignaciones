@@ -77,16 +77,14 @@ def test_valvula_emergencia_lector_martes():
 def test_penalizacion_fatiga(hermanos_base):
     """Verifica que un hermano no sea asignado varias semanas seguidas forzando alternancia."""
     reglas = ReglasAsignacion(
-        puestos_requeridos={"acomodador": 1},
-        limite_semanas_fatiga=1,
-        penalizacion_fatiga=100
+        puestos_requeridos={"acomodador": 1}, limite_semanas_fatiga=1, penalizacion_fatiga=100
     )
     # Filtramos solo 2 hermanos acomodadores para forzar su alternancia
     hermanos = [h for h in hermanos_base if "acomodador" in h.roles][:2]
-    
+
     motor = MotorAsignacion(hermanos=hermanos, reglas=reglas, seed=42)
     mes = motor.generar_mes(num_semanas=3)
-    
+
     # Garantizar que se alternen debido a la regla de fatiga
     assert mes[1]["acomodador"] != mes[2]["acomodador"], "Fallo en prevención de fatiga"
     assert mes[2]["acomodador"] != mes[3]["acomodador"], "Fallo en prevención de fatiga"
@@ -94,17 +92,14 @@ def test_penalizacion_fatiga(hermanos_base):
 
 def test_penalizacion_pareja_repetida(hermanos_base):
     """Verifica que el motor intenta no juntar a los mismos dos hermanos frecuentemente."""
-    reglas = ReglasAsignacion(
-        puestos_requeridos={"microfonos": 2},
-        penalizacion_pareja_repetida=50
-    )
+    reglas = ReglasAsignacion(puestos_requeridos={"microfonos": 2}, penalizacion_pareja_repetida=50)
     # Necesitamos al menos 3 hermanos de micrófonos
     hermanos = [h for h in hermanos_base if "microfonos" in h.roles]
     motor = MotorAsignacion(hermanos=hermanos, reglas=reglas, seed=10)
     mes = motor.generar_mes(num_semanas=2)
-    
+
     pareja_sem_1 = set(mes[1]["microfonos"])
     pareja_sem_2 = set(mes[2]["microfonos"])
-    
+
     # La pareja no debería ser exactamente la misma en la siguiente semana
     assert pareja_sem_1 != pareja_sem_2, "El motor repitió la misma pareja en semanas consecutivas"
