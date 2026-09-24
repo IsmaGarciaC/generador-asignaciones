@@ -14,7 +14,7 @@ class Hermano(BaseModel):
     def strip_nombre(cls, v: str) -> str:
         if isinstance(v, str):
             v = v.strip()
-            if v.startswith(('=', '+', '-', '@')):
+            if v.startswith(("=", "+", "-", "@")):
                 v = f"'{v}"
             return v
         return v
