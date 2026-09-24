@@ -329,15 +329,28 @@ class VentanaRecordatorios(ctk.CTkToplevel):
                     lbl_t = ctk.CTkLabel(f_item, text="Sin teléfono", text_color="#DC3545")
                     lbl_t.pack(side="right", padx=10, pady=5)
 
+    def _generar_mensaje_recordatorio(self, nombre: str, rol: str, fecha_semana: str) -> str:
+        fecha_str = f" ({fecha_semana})" if fecha_semana else ""
+        
+        if rol.lower() == "presidente":
+            return (
+                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de "
+                f"*Presidente de la reunión del Domingo* para esta semana{fecha_str}. "
+                "¡Gracias por su disposición, y buen trabajo!"
+            )
+        else:
+            rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
+            return (
+                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de "
+                f"*{rol_etiqueta}* para esta semana{fecha_str} en la reunión. "
+                "¡Gracias por su disposición, y buen trabajo!"
+            )
+
     def _enviar_wa(self, nombre: str, rol: str, telf: str, fecha: str = ""):
         import urllib.parse
         import webbrowser
 
-        fecha_str = f" ({fecha})" if fecha else ""
-        msg = (
-            f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de *{rol}* "
-            f"para esta semana{fecha_str} en la reunión. ¡Gracias por su disposición, y buen trabajo!"
-        )
+        msg = self._generar_mensaje_recordatorio(nombre, rol, fecha)
         url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
         webbrowser.open(url)
 
@@ -362,15 +375,10 @@ class VentanaRecordatorios(ctk.CTkToplevel):
                     if rol in ("limpieza", "hospitalidad"):
                         continue
 
-                    rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
                     for nombre in nombres:
                         telf = self.telefonos.get(nombre, "")
                         if telf:
-                            fecha_str = f" ({fecha_semana})" if fecha_semana else ""
-                            msg = (
-                                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de *{rol_etiqueta}* "
-                                f"para esta semana{fecha_str} en la reunión. ¡Gracias por su disposición, y buen trabajo!"
-                            )
+                            msg = self._generar_mensaje_recordatorio(nombre, rol, fecha_semana)
                             url = f"https://wa.me/{telf}?text={urllib.parse.quote(msg)}"
                             webbrowser.open(url)
                             time.sleep(1.5)  # Breve pausa para no saturar al navegador
