@@ -39,7 +39,7 @@ def sanitizar_celda(texto: str) -> str:
     """Evita la inyección de fórmulas CSV/Excel en celdas de texto."""
     if not isinstance(texto, str) or not texto:
         return texto
-    if str(texto).startswith(('=', '+', '-', '@', '\t', '\r')):
+    if str(texto).startswith(("=", "+", "-", "@", "\t", "\r")):
         return f"'{texto}"
     return texto
 
@@ -112,7 +112,7 @@ def exportar_programa_excel(
     mes: int,
     grupo_inicio_limpieza: int,
     ruta_salida: str = "salida/programa_mes.xlsx",
-    reglas: ReglasAsignacion = None,
+    reglas: Optional[ReglasAsignacion] = None,
 ) -> dict:
     """
     Genera el archivo Excel optimizado:
