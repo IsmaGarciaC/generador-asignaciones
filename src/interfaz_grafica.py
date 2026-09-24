@@ -2,7 +2,7 @@ import datetime
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional
 
 import customtkinter as ctk
 
@@ -659,6 +659,7 @@ class AppAsignaciones(ctk.CTk):
                 mes=mes_idx,
                 grupo_inicio_limpieza=grupo_seleccionado,
                 ruta_salida=str(ruta_xlsx),
+                reglas=_reglas,
             )
 
             # Actualizar estado para el mes siguiente
@@ -709,7 +710,14 @@ class AppAsignaciones(ctk.CTk):
             logger.exception("Error general en generación: %s", e)
             self.lbl_estado.configure(text=f"❌ Error: {e}", text_color="#DC3545")
 
-    def _mostrar_resumen(self, asignaciones, semanas, mes_str, anio, huecos=None):
+    def _mostrar_resumen(
+        self,
+        asignaciones: Dict[int, Dict[str, List[str]]],
+        semanas: List[dict],
+        mes_str: str,
+        anio: int,
+        huecos: Optional[List[dict]] = None
+    ) -> None:
         self.txt_preview.delete("1.0", "end")
         lineas = [f"=== RESUMEN ASIGNACIONES - {mes_str.upper()} {anio} ===", ""]
 
