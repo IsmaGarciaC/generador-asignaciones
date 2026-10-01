@@ -104,3 +104,19 @@ def test_guardar_y_leer_ausencias_mes(tmp_repo: Repositorio):
 
     # Otro mes debe retornar diccionario vacío
     assert tmp_repo.leer_ausencias_mes(anio=2026, mes=11) == {}
+
+
+def test_guardar_y_leer_asignaciones_mes(tmp_repo: Repositorio):
+    asigs_mes = {
+        1: {"presidente": ["Hermano A"], "audio": ["Hermano B"]},
+        2: {"presidente": ["Hermano B"], "audio": ["Hermano A"]},
+    }
+    tmp_repo.guardar_asignaciones_mes(2026, 10, asigs_mes)
+
+    leidas = tmp_repo.leer_asignaciones_mes(2026, 10)
+    assert leidas is not None
+    assert leidas[1]["presidente"] == ["Hermano A"]
+    assert leidas[2]["audio"] == ["Hermano A"]
+
+    # Mes no guardado debe retornar None
+    assert tmp_repo.leer_asignaciones_mes(2026, 11) is None
