@@ -68,8 +68,8 @@ class MotorAsignacion:
         nombre = hermano.nombre
         registro = self.historial_carga[nombre]
 
-        # 1. Base de carga unificada: siempre usamos la carga global
-        # Multiplicamos por 2 para que el balance total del mes tenga más peso (rotación más equitativa).
+        # 1. Base de carga unificada: siempre usamos la carga global.
+        # Multiplicamos por 2 para dar más peso al balance del mes (rotación equitativa).
         puntos = registro["global"] * 2
 
         # 2. Equilibrio interno para cabina:
