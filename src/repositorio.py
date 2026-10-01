@@ -136,7 +136,10 @@ class Repositorio:
         if not self.ruta_ausencias.exists():
             return {}
         try:
-            datos = json.loads(self.ruta_ausencias.read_text(encoding="utf-8"))
+            contenido = self.ruta_ausencias.read_text(encoding="utf-8").strip()
+            if not contenido:
+                return {}
+            datos = json.loads(contenido)
             return datos if isinstance(datos, dict) else {}
         except (OSError, json.JSONDecodeError) as e:
             logger.warning("No se pudo leer las ausencias: %s", e)

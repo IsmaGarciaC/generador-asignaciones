@@ -221,15 +221,22 @@ class VentanaRecordatorios(ctk.CTkToplevel):
         self, parent, repo: Repositorio, anio: int, mes: int, semanas: list, asignaciones: dict
     ):
         super().__init__(parent)
-        self.title(f"Recordatorios - Mes {mes}/{anio}")
-        self.geometry("650x550")
-        self.grab_set()
-
+        self.parent_app = parent
         self.repo = repo
+        self.anio = anio
+        self.mes = mes
+        self.semanas = semanas or []
         self.asignaciones = asignaciones
 
+        self.title(f"Recordatorios - Mes {MESES[mes - 1]} {anio}")
+        self.geometry("700x580")
+        self.grab_set()
+
         # Mapeo rápido de nombre a teléfono
-        self.telefonos = {h.nombre: h.telefono for h in repo.cargar_hermanos()}
+        try:
+            self.telefonos = {h.nombre: h.telefono for h in repo.cargar_hermanos()}
+        except Exception:
+            self.telefonos = {}
 
         lbl_tit = ctk.CTkLabel(
             self, text="Envío Semiautomático (WhatsApp)", font=ctk.CTkFont(size=18, weight="bold")
@@ -243,52 +250,128 @@ class VentanaRecordatorios(ctk.CTkToplevel):
                 "y haz clic en 'Enviar' para cada hermano. El mensaje ya estará escrito."
             ),
             text_color="gray",
-            wraplength=550,
+            wraplength=600,
         )
-        lbl_info.pack(pady=(0, 15))
+        lbl_info.pack(pady=(0, 10))
 
-        # Selector de Semana
-        frame_sem = ctk.CTkFrame(self, fg_color="transparent")
-        frame_sem.pack(pady=5)
+        # Panel de Filtros (Año, Mes, Semana)
+        frame_filtros = ctk.CTkFrame(self, fg_color="transparent")
+        frame_filtros.pack(pady=5, fill="x", padx=20)
 
-        ctk.CTkLabel(frame_sem, text="Semana:", font=ctk.CTkFont(weight="bold")).pack(
-            side="left", padx=5
+        # Mes
+        ctk.CTkLabel(frame_filtros, text="Mes:", font=ctk.CTkFont(weight="bold")).pack(
+            side="left", padx=(0, 4)
+        )
+        self.combo_mes = ctk.CTkOptionMenu(
+            frame_filtros,
+            values=MESES,
+            command=self._al_cambiar_mes_anio,
+            width=110,
+        )
+        self.combo_mes.set(MESES[mes - 1])
+        self.combo_mes.pack(side="left", padx=(0, 10))
+
+        # Año
+        ctk.CTkLabel(frame_filtros, text="Año:", font=ctk.CTkFont(weight="bold")).pack(
+            side="left", padx=(0, 4)
+        )
+        hoy = datetime.date.today()
+        anios_disponibles = [str(a) for a in range(hoy.year - 1, hoy.year + 4)]
+        self.combo_anio = ctk.CTkOptionMenu(
+            frame_filtros,
+            values=anios_disponibles,
+            command=self._al_cambiar_mes_anio,
+            width=85,
+        )
+        self.combo_anio.set(str(anio))
+        self.combo_anio.pack(side="left", padx=(0, 12))
+
+        # Semana
+        ctk.CTkLabel(frame_filtros, text="Semana:", font=ctk.CTkFont(weight="bold")).pack(
+            side="left", padx=(0, 4)
+        )
+        valores_semanas = (
+            [f"Semana {i + 1} - {semanas[i]['fecha_semana']}" for i in range(len(semanas))]
+            if semanas
+            else ["Sin semanas"]
         )
         self.combo_semana = ctk.CTkOptionMenu(
-            frame_sem,
-            values=[f"Semana {i + 1} - {semanas[i]['fecha_semana']}" for i in range(len(semanas))],
+            frame_filtros,
+            values=valores_semanas,
             command=self._al_cambiar_semana,
+            width=160,
         )
-        self.combo_semana.pack(side="left", padx=5)
+        self.combo_semana.pack(side="left", padx=(0, 10))
 
         self.btn_enviar_todos = ctk.CTkButton(
-            frame_sem,
+            frame_filtros,
             text="Enviar a Todos",
             fg_color="#25D366",
             hover_color="#128C7E",
             command=self._enviar_wa_masivo,
+            width=120,
         )
-        self.btn_enviar_todos.pack(side="left", padx=10)
+        self.btn_enviar_todos.pack(side="right", padx=(5, 0))
 
         self.frame_lista = ctk.CTkScrollableFrame(self)
-        self.frame_lista.pack(fill="both", expand=True, padx=20, pady=15)
+        self.frame_lista.pack(fill="both", expand=True, padx=20, pady=(10, 15))
+
+        self._actualizar_vista_recordatorios()
+
+    def _al_cambiar_mes_anio(self, _=None):
+        self.anio = int(self.combo_anio.get())
+        self.mes = MESES.index(self.combo_mes.get()) + 1
+        self.title(f"Recordatorios - Mes {MESES[self.mes - 1]} {self.anio}")
+        self.semanas = calcular_semanas_mes(self.anio, self.mes)
+        self.asignaciones = self.repo.leer_asignaciones_mes(self.anio, self.mes)
+
+        valores_semanas = (
+            [
+                f"Semana {i + 1} - {self.semanas[i]['fecha_semana']}"
+                for i in range(len(self.semanas))
+            ]
+            if self.semanas
+            else ["Sin semanas"]
+        )
+        self.combo_semana.configure(values=valores_semanas)
+        self.combo_semana.set(valores_semanas[0])
+
+        self._actualizar_vista_recordatorios()
+
+    def _actualizar_vista_recordatorios(self):
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
 
         if self.asignaciones:
+            self.btn_enviar_todos.configure(state="normal")
             self._al_cambiar_semana(self.combo_semana.get())
         else:
+            self.btn_enviar_todos.configure(state="disabled")
+            mes_str = self.combo_mes.get()
             ctk.CTkLabel(
                 self.frame_lista,
-                text="No hay asignaciones guardadas para este mes. Genera el programa primero.",
-            ).pack(pady=20)
+                text=(
+                    f"⚠️ No hay asignaciones guardadas para {mes_str} {self.anio}.\n\n"
+                    "Puedes seleccionar otro mes arriba o generar el programa "
+                    "desde la ventana principal."
+                ),
+                font=ctk.CTkFont(size=13),
+                text_color="gray",
+                justify="center",
+            ).pack(pady=30)
 
     def _al_cambiar_semana(self, sel: str):
         for widget in self.frame_lista.winfo_children():
             widget.destroy()
 
-        if not self.asignaciones:
+        if not self.asignaciones or not sel or not sel.startswith("Semana "):
             return
 
-        idx = int(sel.split(" ")[1])
+        try:
+            idx = int(sel.split(" ")[1])
+        except (IndexError, ValueError):
+            return
+
         fecha_semana = sel.split(" - ", 1)[1] if " - " in sel else ""
         asigs_semana = self.asignaciones.get(idx, {})
 
@@ -331,7 +414,7 @@ class VentanaRecordatorios(ctk.CTkToplevel):
 
     def _generar_mensaje_recordatorio(self, nombre: str, rol: str, fecha_semana: str) -> str:
         fecha_str = f" ({fecha_semana})" if fecha_semana else ""
-        
+
         if rol.lower() == "presidente":
             return (
                 f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de "
@@ -356,10 +439,14 @@ class VentanaRecordatorios(ctk.CTkToplevel):
 
     def _enviar_wa_masivo(self):
         sel = self.combo_semana.get()
-        if not self.asignaciones or not sel:
+        if not self.asignaciones or not sel or not sel.startswith("Semana "):
             return
 
-        idx = int(sel.split(" ")[1])
+        try:
+            idx = int(sel.split(" ")[1])
+        except (IndexError, ValueError):
+            return
+
         fecha_semana = sel.split(" - ", 1)[1] if " - " in sel else ""
         asigs_semana = self.asignaciones.get(idx, {})
 
@@ -420,7 +507,9 @@ class VentanaEdicionAsignaciones(ctk.CTkToplevel):
             for rol in self.reglas.puestos_requeridos.keys()
         }
 
-        self.comboboxes: dict[tuple[int, str, int], ctk.CTkComboBox] = {}  # (semana_idx, rol, indice): widget
+        self.comboboxes: dict[
+            tuple[int, str, int], ctk.CTkComboBox
+        ] = {}  # (semana_idx, rol, indice): widget
         self.semana_activa = None
 
         self._construir_ui()
@@ -433,7 +522,10 @@ class VentanaEdicionAsignaciones(ctk.CTkToplevel):
 
         lbl_info = ctk.CTkLabel(
             self,
-            text="Al guardar los cambios aquí, se actualizarán los mensajes de WhatsApp automáticamente y se exportará un nuevo archivo Excel.",
+            text=(
+                "Al guardar los cambios aquí, se actualizarán los mensajes de WhatsApp "
+                "automáticamente y se exportará un nuevo archivo Excel."
+            ),
             text_color="gray",
             wraplength=650,
         )
@@ -595,8 +687,7 @@ class AppAsignaciones(ctk.CTk):
         self.ultimo_excel = None
 
         self._crear_interfaz()
-        self._actualizar_info_semanas()
-        self.actualizar_conteo_ausencias()
+        self._al_cambiar_fecha()
 
     def _crear_interfaz(self):
         # 1. Cabecera
@@ -623,8 +714,24 @@ class AppAsignaciones(ctk.CTk):
         frame_config.pack(fill="x", padx=25, pady=10)
 
         hoy = datetime.date.today()
-        mes_defecto = hoy.month + 1 if hoy.month < 12 else 1
-        anio_defecto = hoy.year if hoy.month < 12 else hoy.year + 1
+        estado = self.repo.leer_estado()
+
+        # Determinar mes y año inteligente:
+        # 1. Si el mes actual ya tiene asignaciones guardadas, empezar en el mes actual
+        if self.repo.leer_asignaciones_mes(hoy.year, hoy.month):
+            anio_defecto = hoy.year
+            mes_defecto = hoy.month
+        # 2. Si el último mes registrado en estado tiene asignaciones, usarlo
+        elif estado and self.repo.leer_asignaciones_mes(estado.ultimo_anio, estado.ultimo_mes):
+            anio_defecto = estado.ultimo_anio
+            mes_defecto = estado.ultimo_mes
+        # 3. Si no hay nada generado y estamos a fin de mes (> día 20), sugerir mes próximo
+        elif hoy.day > 20:
+            mes_defecto = hoy.month + 1 if hoy.month < 12 else 1
+            anio_defecto = hoy.year if hoy.month < 12 else hoy.year + 1
+        else:
+            mes_defecto = hoy.month
+            anio_defecto = hoy.year
 
         # Fila 1: Año y Mes
         lbl_anio = ctk.CTkLabel(frame_config, text="Año:", font=ctk.CTkFont(weight="bold"))
@@ -799,6 +906,80 @@ class AppAsignaciones(ctk.CTk):
         self._actualizar_info_semanas()
         self._actualizar_grupo_sugerido()
         self.actualizar_conteo_ausencias()
+        self._cargar_asignaciones_existentes()
+
+    def _cargar_asignaciones_existentes(self):
+        anio = int(self.combo_anio.get())
+        mes_str = self.combo_mes.get()
+        mes_idx = MESES.index(mes_str) + 1
+        semanas = calcular_semanas_mes(anio, mes_idx)
+        asignaciones = self.repo.leer_asignaciones_mes(anio, mes_idx)
+
+        nombre_sugerido = f"programa_{mes_str.lower()}_{anio}"
+        ruta_xlsx = self.carpeta_salida / f"{nombre_sugerido}.xlsx"
+
+        if asignaciones:
+            try:
+                hermanos = self.repo.cargar_hermanos()
+                motor = MotorAsignacion(hermanos=hermanos)
+                huecos = motor.listar_puestos_incompletos(asignaciones)
+            except Exception:
+                huecos = []
+
+            self._mostrar_resumen(asignaciones, semanas, mes_str, anio, huecos)
+            self.btn_editar_asig.configure(state="normal")
+            self.btn_abrir_carpeta.configure(state="normal")
+
+            if ruta_xlsx.exists():
+                self.ultimo_excel = ruta_xlsx
+                self.btn_abrir_excel.configure(state="normal")
+            else:
+                self.ultimo_excel = None
+                self.btn_abrir_excel.configure(state="disabled")
+
+            if huecos:
+                resumen_huecos = "; ".join(
+                    f"Sem {h['semana']} {ETIQUETAS_PUESTO.get(h['puesto'], h['puesto'])} "
+                    f"({h['asignados']}/{h['requeridos']})"
+                    for h in huecos
+                )
+                self.lbl_estado.configure(
+                    text=(
+                        f"⚠️ Programa cargado para {mes_str} {anio} "
+                        f"(puestos incompletos: {resumen_huecos})."
+                    ),
+                    text_color="#D97706",
+                )
+            else:
+                self.lbl_estado.configure(
+                    text=(
+                        f"✅ Asignaciones guardadas encontradas para {mes_str} {anio}. "
+                        "Listo para recordatorios o editar."
+                    ),
+                    text_color="#28A745",
+                )
+        else:
+            self.txt_preview.delete("1.0", "end")
+            self.txt_preview.insert(
+                "1.0",
+                f"=== RESUMEN ASIGNACIONES - {mes_str.upper()} {anio} ===\n\n"
+                f"No hay asignaciones guardadas para este mes.\n\n"
+                f"Presiona '✨ Generar Programa Completo' para distribuirlas automáticamente.",
+            )
+            self.btn_editar_asig.configure(state="disabled")
+            self.btn_abrir_carpeta.configure(state="normal")
+
+            if ruta_xlsx.exists():
+                self.ultimo_excel = ruta_xlsx
+                self.btn_abrir_excel.configure(state="normal")
+            else:
+                self.ultimo_excel = None
+                self.btn_abrir_excel.configure(state="disabled")
+
+            self.lbl_estado.configure(
+                text=f"Listo para generar asignaciones para {mes_str} {anio}.",
+                text_color="gray",
+            )
 
     def _actualizar_info_semanas(self):
         anio = int(self.combo_anio.get())
@@ -914,15 +1095,33 @@ class AppAsignaciones(ctk.CTk):
 
     def _ejecutar_generacion(self):
         try:
-            self.lbl_estado.configure(text="Generando Excel...", text_color="gray")
-            self.update_idletasks()
-
-            hermanos = self.repo.cargar_hermanos()
-
             anio = int(self.combo_anio.get())
             mes_str = self.combo_mes.get()
             mes_idx = MESES.index(mes_str) + 1
 
+            # Protección contra sobrescritura accidental si ya existen asignaciones para el mes
+            asigs_existentes = self.repo.leer_asignaciones_mes(anio, mes_idx)
+            if asigs_existentes:
+                from tkinter import messagebox
+
+                confirmar = messagebox.askyesno(
+                    "Sobrescribir Programa",
+                    f"Ya existen asignaciones guardadas para {mes_str} {anio}.\n\n"
+                    "¿Deseas volver a generarlas desde cero?\n"
+                    "Se reemplazará la distribución actual.",
+                    parent=self,
+                )
+                if not confirmar:
+                    self.lbl_estado.configure(
+                        text="Generación cancelada. Se mantuvieron las asignaciones existentes.",
+                        text_color="gray",
+                    )
+                    return
+
+            self.lbl_estado.configure(text="Generando Excel...", text_color="gray")
+            self.update_idletasks()
+
+            hermanos = self.repo.cargar_hermanos()
             grupo_seleccionado = int(self.combo_grupo.get().replace("Grupo # ", ""))
             semanas = calcular_semanas_mes(anio, mes_idx)
 

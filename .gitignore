@@ -12,6 +12,8 @@ salida/
 data/hermanos.json
 data/estado.json
 data/ausencias.json
+data/asignaciones_*.json
+
 
 # Archivos de configuración del editor
 .vscode/
