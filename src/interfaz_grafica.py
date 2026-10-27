@@ -415,19 +415,12 @@ class VentanaRecordatorios(ctk.CTkToplevel):
     def _generar_mensaje_recordatorio(self, nombre: str, rol: str, fecha_semana: str) -> str:
         fecha_str = f" ({fecha_semana})" if fecha_semana else ""
 
-        if rol.lower() == "presidente":
-            return (
-                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de "
-                f"*Presidente de la reunión del Domingo* para esta semana{fecha_str}. "
-                "¡Gracias por su disposición, y buen trabajo!"
-            )
-        else:
-            rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
-            return (
-                f"Buenos días querido hermano: {nombre}. Le recordamos su asignación de "
-                f"*{rol_etiqueta}* para esta semana{fecha_str} en la reunión. "
-                "¡Gracias por su disposición, y buen trabajo!"
-            )
+        rol_etiqueta = ETIQUETAS_PUESTO.get(rol, rol)
+        return (
+            f"Buenas tardes querido hermano: {nombre}. Le recordamos su asignación de "
+            f"*{rol_etiqueta}* para esta semana{fecha_str} en la reunión. "
+            "¡Gracias por su disposición, y buen trabajo!"
+        )
 
     def _enviar_wa(self, nombre: str, rol: str, telf: str, fecha: str = ""):
         import urllib.parse
