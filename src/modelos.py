@@ -66,7 +66,7 @@ class ReglasAsignacion(BaseModel):
             {"es_seccion": False, "label": "Micrófonos", "key": "microfonos", "alto": 45},
             {"es_seccion": False, "label": "Limpieza del Salón", "key": "limpieza", "alto": 30},
             {"es_seccion": False, "label": "Hospitalidad", "key": "hospitalidad", "alto": 30},
-            {"es_seccion": True, "label": "PRESIDENCIA Y LECTURAS", "key": None, "alto": 24},
+            {"es_seccion": True, "label": "PRESIDENCIA Y LECTOR", "key": None, "alto": 24},
             {
                 "es_seccion": False,
                 "label": "Lector Estudio Bíblico",
