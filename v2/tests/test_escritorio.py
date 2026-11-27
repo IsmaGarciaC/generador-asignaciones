@@ -83,9 +83,13 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                     await asyncio.sleep(0.1)
                 else:
                     pytest.fail("El resumen no reflejó la edición antes del guardado.")
+                usuario.find(kind=ui.button, marker=f"bloqueo-{fecha}-audio-1").click()
+                await usuario.should_see("Plazas bloqueadas: 1")
                 usuario.find("Guardar borrador").click()
                 await usuario.should_see("Borrador guardado")
-                assert programas.leer(hoy.year, hoy.month).borrador.plan[plaza] == otra
+                guardado = programas.leer(hoy.year, hoy.month).borrador
+                assert guardado.plan[plaza] == otra
+                assert guardado.bloqueos == frozenset({plaza})
                 usuario.find("Publicar").click()
                 await usuario.should_see("Confirmar publicación")
                 usuario.find("Confirmar publicación").click()
@@ -94,6 +98,19 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 await usuario.should_see("Publicado · versión 1")
                 usuario.find("Exportar Excel").click()
                 await usuario.should_see("Excel guardado en", retries=20)
+                usuario.find("Alcance").click()
+                usuario.find("Una semana").click()
+                await usuario.should_see("Regenerar semana")
+                usuario.find("Regenerar semana").click()
+                await usuario.should_see("El programa se repite", retries=30)
+                vigente = programas.leer(hoy.year, hoy.month).borrador
+                assert vigente == guardado
+                programas.guardar_ausencias(hoy.year, hoy.month, otra, frozenset({fecha}))
+                await usuario.open("/")
+                await usuario.should_see(
+                    f"{fecha:%d/%m} · audio 1: bloqueo inválido, {nombre} "
+                    "tiene una ausencia registrada."
+                )
 
         asyncio.run(recorrer_ventana())
     assert len(list((tmp_path / "privado" / "exportaciones").glob("*.xlsx"))) == 1

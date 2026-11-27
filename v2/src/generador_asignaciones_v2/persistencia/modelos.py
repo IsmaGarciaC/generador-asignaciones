@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     UniqueConstraint,
+    false,
     text,
     true,
 )
@@ -104,6 +105,7 @@ class Asignacion(Base):
     puesto: Mapped[Puesto] = mapped_column(primary_key=True)
     plaza: Mapped[int] = mapped_column(primary_key=True)
     hermano_id: Mapped[int | None] = mapped_column(ForeignKey("hermanos.id"), index=True)
+    bloqueada: Mapped[bool] = mapped_column(server_default=false())
 
 
 class Publicacion(Base):

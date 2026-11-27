@@ -88,20 +88,47 @@ class Contexto:
             and (persona.id, inicio) not in self.ausencias
         )
 
-    def validar(self, plan: Asignaciones) -> list[str]:
+    def validar(
+        self,
+        plan: Asignaciones,
+        *,
+        bloqueos: frozenset[Plaza] = frozenset(),
+    ) -> list[str]:
         requeridas = set(self.plazas())
         servicios = defaultdict(list)
-        errores = []
+        errores = [
+            f"{fecha:%d/%m} · {puesto.value} {numero}: el bloqueo requiere una persona."
+            for fecha, puesto, numero in sorted(bloqueos - plan.keys())
+        ]
         for plaza, persona_id in plan.items():
             inicio, puesto, numero = plaza
-            if plaza not in requeridas or persona_id not in self.candidatos(plaza):
-                errores.append(f"{inicio:%d/%m} · {puesto.value} {numero}: asignación inválida.")
-            servicios[inicio, persona_id].append(puesto)
-        for (inicio, persona_id), puestos in servicios.items():
+            persona = self.personas.get(persona_id)
+            if plaza not in requeridas:
+                motivo = "la plaza no es requerida"
+            elif persona is None:
+                motivo = "la persona no existe en el padrón"
+            elif not persona.activa:
+                motivo = f"{persona.nombre} está inactiva"
+            elif puesto not in persona.puestos:
+                motivo = f"{persona.nombre} no tiene capacitación para este puesto"
+            elif (persona_id, inicio) in self.ausencias:
+                motivo = f"{persona.nombre} tiene una ausencia registrada"
+            else:
+                servicios[inicio, persona_id].append(plaza)
+                continue
+            estado = "bloqueo inválido" if plaza in bloqueos else "asignación inválida"
+            errores.append(f"{inicio:%d/%m} · {puesto.value} {numero}: {estado}, {motivo}.")
+        for (inicio, persona_id), plazas in servicios.items():
+            puestos = [plaza[1] for plaza in plazas]
             if not combinacion_semanal_valida(puestos):
                 persona = self.personas.get(persona_id)
                 nombre = persona.nombre if persona else str(persona_id)
-                errores.append(f"{inicio:%d/%m} · {nombre}: combinación de puestos prohibida.")
+                detalle = ", ".join(f"{puesto.value} {numero}" for _, puesto, numero in plazas)
+                tipo = "bloqueo incompatible, " if any(p in bloqueos for p in plazas) else ""
+                errores.append(
+                    f"{inicio:%d/%m} · {nombre}: {tipo}"
+                    f"combinación de puestos prohibida ({detalle})."
+                )
         return errores
 
 
@@ -148,6 +175,7 @@ class Borrador:
     plan: Asignaciones = field(default_factory=dict)
     num_grupos: int = 4
     grupo_inicial: int = 1
+    bloqueos: frozenset[Plaza] = frozenset()
 
 
 def grupos_semanales(
