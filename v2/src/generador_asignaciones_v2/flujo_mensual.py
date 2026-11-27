@@ -6,17 +6,29 @@ from uuid import uuid4
 
 from generador_asignaciones_v2.dominio.programa import Borrador
 from generador_asignaciones_v2.dominio.puestos import Puesto
-from generador_asignaciones_v2.optimizador import Resultado, resolver
+from generador_asignaciones_v2.optimizador import Resultado
 from generador_asignaciones_v2.persistencia.programas import Programas, VistaMes
 from generador_asignaciones_v2.plantilla_excel import crear_libro
+from generador_asignaciones_v2.regeneracion import Alcance, regenerar
 
 
-def generar(programas: Programas, vista: VistaMes, borrador: Borrador) -> Resultado:
+def generar(
+    programas: Programas,
+    vista: VistaMes,
+    borrador: Borrador,
+    *,
+    alcance: Alcance = None,
+) -> Resultado:
     if vista.historico:
         raise ValueError("El historial importado se conserva para consulta.")
     if not vista.contexto.personas:
         raise ValueError("Agrega o importa el padrón antes de generar.")
-    resultado = resolver(replace(vista.contexto, semanas=borrador.semanas), anterior=borrador.plan)
+    resultado = regenerar(
+        replace(vista.contexto, semanas=borrador.semanas),
+        borrador.plan,
+        borrador.bloqueos,
+        alcance,
+    )
     if resultado.plan is not None:
         programas.guardar(vista, replace(borrador, plan=resultado.plan))
     return resultado

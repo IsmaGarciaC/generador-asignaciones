@@ -36,17 +36,18 @@ def base(tmp_path: Path) -> Iterator[BaseDatos]:
         yield datos
 
 
-def _revision_inicial(base: BaseDatos) -> None:
+def _revision_inicial(base: BaseDatos, revision: str = "0001") -> None:
     base.ruta.parent.mkdir(parents=True)
     config = Config()
     config.set_main_option("script_location", "generador_asignaciones_v2.persistencia:migraciones")
     with base.motor.begin() as conexion:
         config.attributes["connection"] = conexion
-        command.upgrade(config, "0001")
+        command.upgrade(config, revision)
         conexion.exec_driver_sql("INSERT INTO hermanos (id, nombre) VALUES (41, 'Persona 41')")
         conexion.exec_driver_sql("INSERT INTO programas (id, anio, mes) VALUES (9, 2026, 12)")
         conexion.exec_driver_sql(
-            "INSERT INTO semanas_programa VALUES (9, '2026-12-01', 4, 3)"
+            "INSERT INTO semanas_programa (programa_id, inicio_semana, limpieza, hospitalidad) "
+            "VALUES (9, '2026-12-01', 4, 3)"
         )
         conexion.exec_driver_sql(
             "INSERT INTO asignaciones VALUES (9, '2026-12-01', 'audio', 1, 41)"
@@ -77,11 +78,23 @@ def test_base_vacia_con_esquema_al_dia(base: BaseDatos) -> None:
     with base.motor.connect() as conexion:
         assert conexion.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         contexto = MigrationContext.configure(conexion, opts={"compare_server_default": True})
-        assert contexto.get_current_revision() == "0003"
+        assert contexto.get_current_revision() == "0004"
         assert compare_metadata(contexto, Base.metadata) == []
     with base.transaccion() as sesion:
         assert sesion.scalars(select(Programa)).all() == []
     assert not (base.ruta.parent / "respaldos").exists()
+
+
+def test_migrar_revision_0003_conserva_asignaciones_sin_bloquearlas(base: BaseDatos) -> None:
+    _revision_inicial(base, "0003")
+    base.preparar()
+    with base.transaccion() as sesion:
+        asignacion = sesion.get_one(Asignacion, (9, MARTES, Puesto.AUDIO, 1))
+        assert asignacion.hermano_id == 41
+        assert not asignacion.bloqueada
+    (respaldo,) = (base.ruta.parent / "respaldos").glob("antes-de-migrar-*.sqlite3")
+    with closing(sqlite3.connect(respaldo)) as anterior:
+        assert anterior.execute("SELECT version_num FROM alembic_version").fetchone() == ("0003",)
 
 
 def test_dos_arranques_concurrentes_crean_solo_un_respaldo_diario(base: BaseDatos) -> None:

@@ -25,6 +25,8 @@ Para diagnosticar un fallo de inicio desde la raíz, ejecuta `.\v2\venv\Scripts\
 3. Pulsa **Generar mes** y revisa **Carga y descanso** para ver las asignaciones y la mayor racha por persona. Si al regenerar sale el mismo programa, la aplicación busca otro reparto de igual calidad. El resumen refleja las ediciones del borrador. Para intercambiar personas, ajusta las dos plazas antes de pulsar **Guardar borrador**.
 4. Pulsa **Publicar**. Si hay vacantes, revisa la lista antes de confirmar. **Exportar Excel** guarda las hojas «Programa General» y «Audio y Video» de la última versión publicada en `exportaciones`, junto a la base local. Las correcciones posteriores aparecen en el Excel al publicar una nueva versión.
 
+Para conservar una asignación al regenerar, pulsa su candado. **Guardar borrador** conserva los bloqueos. En **Alcance** puedes elegir todo el mes, una semana o un puesto durante todo el mes. Las asignaciones bloqueadas y las plazas fuera del alcance, incluidas las vacantes, se conservan. Si una ausencia u otro cambio invalida un bloqueo, la ventana indica la fecha, el puesto y el motivo.
+
 ## Base local y respaldo
 
 La base se guarda en `%LOCALAPPDATA%\GeneradorAsignacionesV2\programa.sqlite3`. Alembic crea el esquema en el primer arranque. Cuando una base existente necesita una migración, la aplicación conserva un respaldo verificado de la revisión anterior antes de actualizarla.

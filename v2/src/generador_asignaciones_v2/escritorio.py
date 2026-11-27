@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from generador_asignaciones_v2.dominio.programa import (
     Asignaciones,
     Borrador,
+    Plaza,
     Semana,
     grupos_semanales,
     resumir_carga,
@@ -23,6 +24,7 @@ from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 from generador_asignaciones_v2.flujo_mensual import exportar, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
 from generador_asignaciones_v2.persistencia.programas import Programas, VistaMes
+from generador_asignaciones_v2.regeneracion import Alcance
 
 TITULO = "Generador de Asignaciones"
 MESES = dict(
@@ -80,12 +82,51 @@ def _nombres(vista: VistaMes) -> dict[int, str]:
     }
 
 
-def _matriz(vista: VistaMes) -> dict:
+def _control_bloqueo(
+    selector: ui.select,
+    plaza: Plaza,
+    etiqueta: str,
+    bloqueos: set[Plaza],
+    al_cambiar: Callable[[], None],
+) -> None:
+    fecha, puesto, numero = plaza
+
+    def actualizar() -> None:
+        bloqueada = plaza in bloqueos
+        selector.set_enabled(not bloqueada)
+        boton.set_enabled(selector.value is not None or bloqueada)
+        boton.props(f"icon={'lock' if bloqueada else 'lock_open'}")
+        accion = "Desbloquear" if bloqueada else "Bloquear"
+        texto = f"{accion} {etiqueta}, {fecha:%d/%m}"
+        boton.props(f'aria-label="{texto}"')
+        ayuda.set_text(texto)
+
+    def alternar() -> None:
+        if plaza in bloqueos:
+            bloqueos.remove(plaza)
+        elif selector.value is not None:
+            bloqueos.add(plaza)
+        actualizar()
+        al_cambiar()
+
+    boton = ui.button(on_click=alternar).props("flat round dense").classes("shrink-0")
+    boton.mark(f"bloqueo-{fecha}-{puesto.value}-{numero}")
+    with boton:
+        ayuda = ui.tooltip()
+    selector.on_value_change(lambda: actualizar())
+    actualizar()
+
+
+def _matriz(
+    vista: VistaMes,
+    al_cambiar_bloqueo: Callable[[], None],
+) -> tuple[dict[Plaza, ui.select], set[Plaza]]:
     borrador = vista.borrador
     nombres = _nombres(vista)
     requeridas = set(vista.contexto.plazas())
     grupos = grupos_semanales(borrador.semanas, borrador.num_grupos, borrador.grupo_inicial)
     controles = {}
+    bloqueos = set(borrador.bloqueos)
     with html.div().classes("matriz"), html.table(**{"aria-label": "Asignaciones por semana"}):
         with html.thead(), html.tr():
             html.th("Plaza", scope="col")
@@ -111,17 +152,23 @@ def _matriz(vista: VistaMes) -> dict:
                                     opciones = {i: nombres[i] for i in candidatos}
                                     if persona is not None and persona not in opciones:
                                         opciones[persona] = f"{nombres[persona]} · revisar"
-                                    control = ui.select(opciones, value=persona, clearable=True)
-                                    controles[plaza] = control
-                                    control.mark(f"plaza-{semana.inicio}-{puesto.value}-{numero}")
-                                    control.props(
-                                        f'dense borderless placeholder="Pendiente" '
-                                        f'aria-label="{etiqueta} {semana.inicio:%d/%m}"'
-                                    ).classes("w-full")
-                                    if persona is None:
-                                        texto = "Pendiente" if opciones else "Sin candidatos"
-                                        control.props(f'display-value="{texto}"')
-                                    control.on_value_change(_mostrar_vacante)
+                                    with ui.row().classes("items-center no-wrap gap-1 w-full"):
+                                        control = ui.select(opciones, value=persona, clearable=True)
+                                        controles[plaza] = control
+                                        control.mark(
+                                            f"plaza-{semana.inicio}-{puesto.value}-{numero}"
+                                        )
+                                        control.props(
+                                            f'dense borderless placeholder="Pendiente" '
+                                            f'aria-label="{etiqueta} {semana.inicio:%d/%m}"'
+                                        ).classes("flex-1 min-w-0")
+                                        if persona is None:
+                                            texto = "Pendiente" if opciones else "Sin candidatos"
+                                            control.props(f'display-value="{texto}"')
+                                        control.on_value_change(_mostrar_vacante)
+                                        _control_bloqueo(
+                                            control, plaza, etiqueta, bloqueos, al_cambiar_bloqueo
+                                        )
             if not vista.historico:
                 for indice, etiqueta in enumerate(("Limpieza", "Hospitalidad")):
                     with html.tr():
@@ -129,7 +176,7 @@ def _matriz(vista: VistaMes) -> dict:
                         for semana in borrador.semanas:
                             grupo = grupos[semana.inicio][indice]
                             html.td(f"Grupo {grupo}" if grupo is not None else "Cancelada")
-    return controles
+    return controles, bloqueos
 
 
 def _mostrar_vacante(evento: ValueChangeEventArguments) -> None:
@@ -139,14 +186,21 @@ def _mostrar_vacante(evento: ValueChangeEventArguments) -> None:
         evento.sender.props(remove="display-value")
 
 
-def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], None]) -> None:
+def _programa(
+    programas: Programas,
+    vista: VistaMes,
+    refrescar: Callable[[], None],
+    alcances: dict[tuple[int, int], Alcance],
+) -> None:
     borrador = vista.borrador
+    periodo = borrador.anio, borrador.mes
+    alcance_previo = alcances.get(periodo)
     plazas = set(vista.contexto.plazas())
     pendientes = plazas - borrador.plan.keys()
     html.h2(f"{MESES[borrador.mes]} {borrador.anio}")
     if vista.historico:
         ui.label("Historial importado")
-        _matriz(vista)
+        _matriz(vista, lambda: None)
         return
     if vista.publicado_al_dia:
         estado = f"Publicado · versión {vista.version}"
@@ -174,7 +228,7 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
                     value=sorted(semana.desactivados),
                 ).classes("min-w-56")
                 calendario[semana.inicio] = (martes, domingo, inactivos)
-    controles = _matriz(vista)
+    controles, bloqueos = _matriz(vista, lambda: revisar_bloqueos.refresh())
 
     def semanas_editadas() -> tuple[Semana, ...]:
         return tuple(
@@ -190,6 +244,27 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             if c.value is not None and plaza in requeridas
         }
 
+    def asignaciones_editadas(semanas: tuple[Semana, ...]) -> Asignaciones:
+        plan = asignaciones_visibles(semanas)
+        for plaza in bloqueos:
+            persona = controles[plaza].value if plaza in controles else borrador.plan.get(plaza)
+            if persona is not None:
+                plan[plaza] = persona
+        return plan
+
+    @ui.refreshable
+    def revisar_bloqueos() -> None:
+        if not bloqueos:
+            return
+        ui.label(f"Plazas bloqueadas: {len(bloqueos)}").classes("text-sm")
+        semanas = semanas_editadas()
+        contexto = replace(vista.contexto, semanas=semanas)
+        fijas = {p: i for p, i in asignaciones_editadas(semanas).items() if p in bloqueos}
+        for error in contexto.validar(fijas, bloqueos=frozenset(bloqueos)):
+            ui.label(error).classes("text-red-800 font-medium")
+
+    revisar_bloqueos()
+
     @ui.refreshable
     def resumen() -> None:
         semanas = semanas_editadas()
@@ -203,7 +278,12 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             cargas, key=lambda i: (-cargas[i].racha_maxima, -cargas[i].asignaciones, nombres[i])
         )
         con_racha = sum(c.racha_maxima >= 3 for c in cargas.values())
-        ui.label(f"Personas con tres o más semanas seguidas: {con_racha}")
+        ui.label(f"Personas con tres o más semanas seguidas: {con_racha}").classes(
+            "text-amber-900" if con_racha else ""
+        )
+        repeticiones = Counter((p[1], i) for p, i in plan.items())
+        if repetidas := sum(n - 1 for n in repeticiones.values()):
+            ui.label(f"Repeticiones de puesto en el mes: {repetidas}").classes("text-amber-900")
         columnas = [
             {"name": "persona", "label": "Persona", "field": "persona", "align": "left"},
             {"name": "total", "label": "Asignaciones", "field": "total", "sortable": True},
@@ -232,6 +312,7 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
     for grupo in calendario.values():
         for control in grupo:
             control.on_value_change(lambda: resumen.refresh())
+            control.on_value_change(lambda: revisar_bloqueos.refresh())
 
     def tomar() -> Borrador:
         if any(c.value is None or int(c.value) != c.value for c in (cantidad, inicial)):
@@ -240,9 +321,10 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
         return replace(
             borrador,
             semanas=semanas,
-            plan=asignaciones_visibles(semanas),
+            plan=asignaciones_editadas(semanas),
             num_grupos=int(cantidad.value),
             grupo_inicial=int(inicial.value),
+            bloqueos=frozenset(bloqueos),
         )
 
     async def guardar() -> None:
@@ -255,10 +337,18 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             ui.notify("Borrador guardado", type="positive")
             refrescar()
 
+    def alcance_elegido() -> Alcance:
+        if selector_alcance.value == "semana":
+            return date.fromisoformat(selector_semana.value)
+        if selector_alcance.value == "puesto":
+            return Puesto(selector_puesto.value)
+        return None
+
     async def generar_mes() -> None:
         try:
             cambios = tomar()
             grupos_semanales(cambios.semanas, cambios.num_grupos, cambios.grupo_inicial)
+            alcance = alcance_elegido()
         except ValueError as error:
             ui.notify(str(error), type="warning")
             return
@@ -267,7 +357,9 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
         boton_publicar.disable()
         resultado = None
         try:
-            exito, resultado = await _operar(lambda: generar(programas, vista, cambios))
+            exito, resultado = await _operar(
+                lambda: generar(programas, vista, cambios, alcance=alcance)
+            )
         finally:
             if not boton_generar.is_deleted and (resultado is None or resultado.plan is None):
                 boton_generar.enable()
@@ -356,6 +448,45 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
     with ui.row().classes("items-center gap-2"):
         boton_generar = ui.button("Generar mes", on_click=generar_mes, icon="auto_awesome")
         boton_generar.set_enabled(bool(vista.contexto.personas))
+        selector_alcance = ui.select(
+            {"mes": "Mes completo", "semana": "Una semana", "puesto": "Un puesto del mes"},
+            value="semana"
+            if isinstance(alcance_previo, date)
+            else "puesto"
+            if isinstance(alcance_previo, Puesto)
+            else "mes",
+            label="Alcance",
+        ).classes("min-w-40")
+        selector_semana = ui.select(
+            {s.inicio.isoformat(): f"{s.inicio:%d/%m}" for s in borrador.semanas},
+            value=(
+                alcance_previo if isinstance(alcance_previo, date) else borrador.semanas[0].inicio
+            ).isoformat(),
+            label="Semana",
+        ).classes("min-w-28")
+        selector_puesto = ui.select(
+            PUESTOS,
+            value=alcance_previo if isinstance(alcance_previo, Puesto) else Puesto.AUDIO,
+            label="Puesto",
+        ).classes("min-w-36")
+
+        def cambiar_alcance() -> None:
+            ambito = selector_alcance.value
+            selector_semana.set_visibility(ambito == "semana")
+            selector_puesto.set_visibility(ambito == "puesto")
+            boton_generar.set_text(
+                {"mes": "Generar mes", "semana": "Regenerar semana", "puesto": "Regenerar puesto"}[
+                    ambito
+                ]
+            )
+            alcances[periodo] = alcance_elegido()
+
+        selector_alcance.on_value_change(lambda: cambiar_alcance())
+        selector_semana.on_value_change(lambda: cambiar_alcance())
+        selector_puesto.on_value_change(lambda: cambiar_alcance())
+        cambiar_alcance()
+
+    with ui.row().classes("items-center gap-2"):
         boton_guardar = ui.button("Guardar borrador", on_click=guardar).props("outline")
         boton_publicar = ui.button("Publicar", on_click=publicar).props("outline")
         boton_publicar.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
@@ -497,10 +628,11 @@ def _importacion(programas: Programas, anio: int, mes: int, actualizar: Callable
 def mostrar_inicio(programas: Programas) -> None:
     hoy = date.today()
     periodo = hoy.year, hoy.month
+    alcances: dict[tuple[int, int], Alcance] = {}
 
     @ui.refreshable
     def programa() -> None:
-        _programa(programas, programas.leer(*periodo), programa.refresh)
+        _programa(programas, programas.leer(*periodo), programa.refresh, alcances)
 
     @ui.refreshable
     def padron() -> None:

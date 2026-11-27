@@ -141,15 +141,22 @@ def _vista(sesion: Session, anio: int, mes: int, programa: Programa | None) -> V
         )
     }
     semanas = tuple(filas.get(fecha, Semana(fecha)) for fecha in fechas)
-    plan = {
-        (a.inicio_semana, a.puesto, a.plaza): a.hermano_id
-        for a in sesion.scalars(
-            select(Asignacion).where(
-                Asignacion.programa_id == programa.id, Asignacion.hermano_id.is_not(None)
-            )
+    asignaciones = sesion.scalars(
+        select(Asignacion).where(
+            Asignacion.programa_id == programa.id, Asignacion.hermano_id.is_not(None)
         )
-    }
-    borrador = Borrador(anio, mes, semanas, plan, programa.num_grupos, programa.grupo_inicial)
+    ).all()
+    plan = {(a.inicio_semana, a.puesto, a.plaza): a.hermano_id for a in asignaciones}
+    bloqueos = frozenset((a.inicio_semana, a.puesto, a.plaza) for a in asignaciones if a.bloqueada)
+    borrador = Borrador(
+        anio,
+        mes,
+        semanas,
+        plan,
+        programa.num_grupos,
+        programa.grupo_inicial,
+        bloqueos=bloqueos,
+    )
     publicada = _publicacion(sesion, programa.id)
     return VistaMes(
         borrador,
@@ -184,7 +191,13 @@ class Programas:
             if actual.revision != origen.revision or actual.contexto != origen.contexto:
                 raise ValueError("El mes o sus datos cambiaron. Vuelve a cargarlo.")
             contexto = replace(actual.contexto, semanas=borrador.semanas)
-            if errores := contexto.validar(borrador.plan):
+            for plaza in actual.borrador.bloqueos & borrador.bloqueos:
+                if borrador.plan.get(plaza) != actual.borrador.plan[plaza]:
+                    fecha, puesto, cupo = plaza
+                    raise ValueError(
+                        f"{fecha:%d/%m} · {puesto.value} {cupo}: desbloquea la plaza para editarla."
+                    )
+            if errores := contexto.validar(borrador.plan, bloqueos=borrador.bloqueos):
                 raise ValueError("\n".join(errores))
             if programa is not None and actual.borrador == borrador:
                 return
@@ -212,6 +225,7 @@ class Programas:
                     puesto=puesto,
                     plaza=cupo,
                     hermano_id=persona,
+                    bloqueada=(inicio, puesto, cupo) in borrador.bloqueos,
                 )
                 for (inicio, puesto, cupo), persona in borrador.plan.items()
             )
@@ -225,7 +239,9 @@ class Programas:
             vista = _vista(sesion, anio, mes, programa)
             if (vista.revision, vista.contexto) != (origen.revision, origen.contexto):
                 raise ValueError("El mes o sus datos cambiaron. Vuelve a cargarlo.")
-            if errores := vista.contexto.validar(vista.borrador.plan):
+            if errores := vista.contexto.validar(
+                vista.borrador.plan, bloqueos=vista.borrador.bloqueos
+            ):
                 raise ValueError("\n".join(errores))
             if vista.publicado_al_dia and vista.version is not None:
                 return vista.version
