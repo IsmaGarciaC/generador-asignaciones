@@ -102,6 +102,24 @@ def test_motor_maximiza_cobertura_y_distingue_incertidumbre() -> None:
     assert resolver(contexto, segundos=0).estado == "UNKNOWN"
 
 
+def test_motor_alterna_el_mismo_puesto_desde_la_ultima_semana_del_mes_anterior() -> None:
+    fechas = martes_del_mes(2026, 12)[:4]
+    anterior = fechas[0] - timedelta(weeks=1)
+    semanas = tuple(
+        Semana(fecha, desactivados=frozenset(set(Puesto) - {Puesto.AUDIO})) for fecha in fechas
+    )
+    contexto = Contexto(
+        semanas,
+        {i: Persona(i, f"Persona {i}", frozenset({Puesto.AUDIO})) for i in (1, 2)},
+        historial={(1, anterior): 1, (2, anterior): 1},
+        puestos_historicos=frozenset({(1, anterior, Puesto.AUDIO)}),
+    )
+    resultado = resolver(contexto)
+    assert resultado.estado == "OPTIMAL"
+    assert resultado.plan is not None
+    assert [resultado.plan[fecha, Puesto.AUDIO, 1] for fecha in fechas] == [2, 1, 2, 1]
+
+
 def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):
     copia = tmp_path / "Copia V1"
     crear_copia(copia)
@@ -117,6 +135,7 @@ def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, 
     assert programas.leer(2026, 11).historico
     vista = programas.leer(2026, 12)
     assert vista.contexto.historial[1, date(2026, 11, 3)] == 2
+    assert (1, date(2026, 11, 3), Puesto.VIDEO) in vista.contexto.puestos_historicos
     assert (2, date(2026, 11, 3)) not in vista.contexto.historial
 
     semanas = list(vista.borrador.semanas)

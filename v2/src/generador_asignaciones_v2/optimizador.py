@@ -27,16 +27,26 @@ class Modelo:
         self.por_rol = defaultdict(list)
         self.trabaja = {}
         self.dobles = []
+        rangos = {persona: i for i, persona in enumerate(sorted(contexto.personas), 1)}
+        orden = {}
         for plaza in contexto.plazas():
             inicio, puesto, cupo = plaza
             variables = []
-            for persona in contexto.candidatos(plaza):
+            candidatos = contexto.candidatos(plaza)
+            for persona in candidatos:
                 variable = self.cp.new_bool_var(f"{inicio}_{puesto}_{cupo}_{persona}")
                 self.asigna[plaza, persona] = variable
                 self.servicios[persona].append(variable)
                 self.por_rol[persona, inicio, puesto].append(variable)
                 variables.append(variable)
             self.cp.add_at_most_one(variables)
+            # Las dos plazas de un puesto son equivalentes. Coloca los huecos al final.
+            orden[plaza] = sum(
+                (rangos[persona] - len(rangos) - 1) * self.asigna[plaza, persona]
+                for persona in candidatos
+            )
+            if cupo > 1:
+                self.cp.add(orden[inicio, puesto, cupo - 1] <= orden[plaza])
 
         for persona in contexto.personas.values():
             for semana in contexto.semanas:
@@ -113,14 +123,27 @@ class Modelo:
             for i in range(len(semanas)):
                 racha = self.cp.new_bool_var("tres_seguidas")
                 self.cp.add_min_equality(racha, servicio[i : i + 3])
-                penas.append(racha)
+                penas.append(3 * racha)
+                seguida = self.cp.new_bool_var("servicio_consecutivo")
+                self.cp.add_min_equality(seguida, servicio[i + 1 : i + 3])
+                penas.append(seguida)
             for puesto in sorted(persona.puestos):
                 veces = []
+                anterior = int(
+                    (persona.id, semanas[0].inicio - timedelta(weeks=1), puesto)
+                    in self.contexto.puestos_historicos
+                )
                 for semana in semanas:
                     variables = self.por_rol[persona.id, semana.inicio, puesto]
                     veces.extend(variables)
+                    presente = sum(variables)
+                    if variables:
+                        consecutiva = self.cp.new_bool_var("puesto_consecutivo")
+                        self.cp.add_min_equality(consecutiva, [anterior, presente])
+                        penas.append(2 * consecutiva)
+                    anterior = presente
                     if variables and puesto in (Puesto.MICROFONOS, Puesto.ACOMODADOR):
-                        equipos[semana.inicio, puesto].append((persona.id, sum(variables)))
+                        equipos[semana.inicio, puesto].append((persona.id, presente))
                 if len(veces) > 1:
                     penas.append(self.repeticiones(veces))
         encuentros = defaultdict(list)
@@ -150,8 +173,10 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
                 objetivo = modelo.rotacion()
             modelo.cp.minimize(objetivo)
         solver = cp.CpSolver()
-        solver.parameters.max_time_in_seconds = segundos
-        solver.parameters.num_search_workers = 1
+        # La rotación tiene más combinaciones y se ejecuta sobre los objetivos ya fijados.
+        es_rotacion = nombre == "rotación"
+        solver.parameters.max_time_in_seconds = segundos * (2 if es_rotacion else 1)
+        solver.parameters.num_search_workers = 4 if es_rotacion else 1
         solver.parameters.random_seed = 73
         estado = solver.solve(modelo.cp)
         if estado == cp.UNKNOWN and plan is not None:

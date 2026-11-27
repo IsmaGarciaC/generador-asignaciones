@@ -73,6 +73,7 @@ class Contexto:
     ausencias: frozenset[tuple[int, date]] = frozenset()
     # Solo incluye semanas de disponibilidad conocida. El valor es el número de servicios.
     historial: dict[tuple[int, date], int] = field(default_factory=dict)
+    puestos_historicos: frozenset[tuple[int, date, Puesto]] = frozenset()
 
     def plazas(self) -> tuple[Plaza, ...]:
         return tuple(plaza for semana in self.semanas for plaza in semana.plazas())
