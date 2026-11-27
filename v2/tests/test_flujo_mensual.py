@@ -226,6 +226,41 @@ def test_motor_prioriza_no_repetir_puesto_aun_si_la_carga_total_es_distinta() ->
     assert sorted(Counter(resultado.plan.values()).values()) == [1, 1, 1, 3, 3]
 
 
+def test_regenerar_mes_guarda_un_reparto_distinto_con_igual_calidad(programas: Programas) -> None:
+    puestos = frozenset({Puesto.AUDIO, Puesto.VIDEO})
+    for i in (1, 2):
+        programas.guardar_persona(None, f"Persona {i}", "", puestos, True)
+    vista = programas.leer(2026, 12)
+    semanas = tuple(
+        Semana(s.inicio, martes=False, domingo=False)
+        if i > 1
+        else Semana(s.inicio, desactivados=frozenset(set(Puesto) - puestos))
+        for i, s in enumerate(vista.borrador.semanas)
+    )
+    primero = generar(programas, vista, replace(vista.borrador, semanas=semanas))
+    vista = programas.leer(2026, 12)
+    siguiente = generar(programas, vista, vista.borrador)
+    assert primero.plan is not None and siguiente.plan is not None
+    assert primero.estado == siguiente.estado == "OPTIMAL"
+    assert len(primero.plan) == len(siguiente.plan) == 4
+    assert all(primero.plan[plaza] != i for plaza, i in siguiente.plan.items())
+    assert len({(puesto, i) for (_, puesto, _), i in siguiente.plan.items()}) == 4
+    assert programas.leer(2026, 12).borrador.plan == siguiente.plan
+
+
+def test_intercambiar_cupos_equivalentes_no_cuenta_como_otra_propuesta() -> None:
+    fecha = date(2026, 12, 1)
+    puesto = Puesto.MICROFONOS
+    contexto = Contexto(
+        (Semana(fecha, desactivados=frozenset(set(Puesto) - {puesto})),),
+        {i: Persona(i, f"Persona {i}", frozenset({puesto})) for i in (1, 2)},
+    )
+    anterior = {(fecha, puesto, 1): 2, (fecha, puesto, 2): 1}
+    resultado = resolver(contexto, anterior=anterior)
+    assert resultado.plan == {(fecha, puesto, 1): 1, (fecha, puesto, 2): 2}
+    assert resultado.aviso_variacion == "única"
+
+
 def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):
     copia = tmp_path / "Copia V1"
     crear_copia(copia)

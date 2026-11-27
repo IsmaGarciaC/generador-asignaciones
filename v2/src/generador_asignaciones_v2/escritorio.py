@@ -293,7 +293,17 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             mensaje = "Programa factible · optimalidad pendiente"
             if probados:
                 mensaje += f" · Objetivos demostrados: {probados}"
-        ui.notify(mensaje, type="positive")
+        if resultado.aviso_variacion == "única":
+            ui.notify(
+                "El programa se repite porque no hay otro reparto con los mismos resultados.",
+                type="info",
+            )
+        elif resultado.aviso_variacion == "sin_resultado":
+            ui.notify(
+                "La búsqueda terminó sin encontrar otro reparto de igual calidad.", type="info"
+            )
+        else:
+            ui.notify(mensaje, type="positive")
         refrescar()
 
     async def confirmar(aceptar: bool) -> None:

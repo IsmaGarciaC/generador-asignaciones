@@ -1,9 +1,12 @@
 """Optimización mensual lexicográfica con CP-SAT."""
 
 from collections import defaultdict
-from dataclasses import dataclass
-from datetime import timedelta
+from collections.abc import Iterator
+from dataclasses import dataclass, replace
+from datetime import date, timedelta
 from itertools import combinations, pairwise
+from secrets import randbelow
+from typing import Literal
 
 from ortools.sat.python import cp_model as cp
 
@@ -16,6 +19,7 @@ class Resultado:
     estado: str
     plan: Asignaciones | None
     objetivos_probados: tuple[str, ...]
+    aviso_variacion: Literal["única", "sin_resultado"] | None = None
 
 
 class Modelo:
@@ -196,36 +200,26 @@ class Modelo:
         penas.extend(self.repeticiones(veces) for veces in encuentros.values() if len(veces) > 1)
         return sum(penas)
 
+    def objetivos(self) -> Iterator[tuple[str, cp.LinearExpr | int]]:
+        yield "cobertura", -sum(self.asigna.values())
+        yield "dobletes", sum(self.dobles)
+        yield "variedad de puestos", self.variedad_puestos()
+        yield "carga del mes", self.equidad(incluir_historial=False)
+        yield "equidad histórica", self.equidad(incluir_historial=True)
+        yield "descanso tras dos semanas", self.descanso()
+        yield "rotación de parejas y puestos", self.rotacion()
 
-def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
-    modelo = Modelo(contexto)
+    def leer_plan(self, solver: cp.CpSolver) -> Asignaciones:
+        return {
+            plaza: persona for (plaza, persona), var in self.asigna.items() if solver.value(var)
+        }
+
+
+def _optimizar(modelo: Modelo, segundos: float) -> Resultado:
     plan = None
     probados = []
-    objetivos = (
-        "cobertura",
-        "dobletes",
-        "variedad de puestos",
-        "carga del mes",
-        "equidad histórica",
-        "descanso tras dos semanas",
-        "rotación de parejas y puestos",
-    )
-    for nombre in objetivos:
-        if nombre == "cobertura":
-            objetivo = sum(modelo.asigna.values())
-            modelo.cp.maximize(objetivo)
-        else:
-            if nombre == "dobletes":
-                objetivo = sum(modelo.dobles)
-            elif nombre in ("carga del mes", "equidad histórica"):
-                objetivo = modelo.equidad(incluir_historial=nombre == "equidad histórica")
-            elif nombre == "variedad de puestos":
-                objetivo = modelo.variedad_puestos()
-            elif nombre == "descanso tras dos semanas":
-                objetivo = modelo.descanso()
-            else:
-                objetivo = modelo.rotacion()
-            modelo.cp.minimize(objetivo)
+    for nombre, objetivo in modelo.objetivos():
+        modelo.cp.minimize(objetivo)
         solver = cp.CpSolver()
         # La variedad se resuelve antes de agregar las variables de las parejas.
         preferencias = nombre not in ("cobertura", "dobletes")
@@ -242,9 +236,7 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
             return Resultado("FEASIBLE", plan, tuple(probados))
         if estado not in (cp.OPTIMAL, cp.FEASIBLE):
             return Resultado(solver.status_name(estado), None, tuple(probados))
-        plan = {
-            plaza: persona for (plaza, persona), var in modelo.asigna.items() if solver.value(var)
-        }
+        plan = modelo.leer_plan(solver)
         if estado == cp.FEASIBLE:
             return Resultado("FEASIBLE", plan, tuple(probados))
         probados.append(nombre)
@@ -253,3 +245,59 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
         for variable in modelo.asigna.values():
             modelo.cp.add_hint(variable, solver.value(variable))
     return Resultado("OPTIMAL", plan, tuple(probados))
+
+
+def _turnos(plan: Asignaciones) -> set[tuple[date, Puesto, int]]:
+    return {(fecha, puesto, persona) for (fecha, puesto, _), persona in plan.items()}
+
+
+def _buscar_alternativa(
+    contexto: Contexto,
+    resultado: Resultado,
+    plan: Asignaciones,
+    segundos: float,
+) -> Resultado:
+    modelo = Modelo(contexto)
+    objetivos = [objetivo for _, objetivo in modelo.objetivos()]
+    referencia = modelo.cp.clone()
+    for (plaza, persona), variable in modelo.asigna.items():
+        ref = referencia.get_bool_var_from_proto_index(variable.index)
+        referencia.add(ref == int(plan.get(plaza) == persona))
+    # Con las asignaciones fijas, cada término alcanza su coste real sin competir con otro.
+    referencia.minimize(sum(objetivos))
+    solver = cp.CpSolver()
+    solver.parameters.max_time_in_seconds = segundos
+    solver.parameters.num_search_workers = 1
+    if solver.solve(referencia) != cp.OPTIMAL:
+        return replace(resultado, aviso_variacion="sin_resultado")
+    for objetivo in objetivos:
+        modelo.cp.add(objetivo <= solver.value(objetivo))
+
+    turnos = _turnos(plan)
+    compartidos = sum(
+        var
+        for ((fecha, puesto, _), persona), var in modelo.asigna.items()
+        if (fecha, puesto, persona) in turnos
+    )
+    modelo.cp.add(compartidos < len(turnos))
+    modelo.cp.minimize(compartidos)
+    solver.parameters.num_search_workers = 4
+    solver.parameters.random_seed = randbelow(2**31 - 1)
+    solver.parameters.randomize_search = True
+    estado = solver.solve(modelo.cp)
+    if estado in (cp.OPTIMAL, cp.FEASIBLE):
+        return replace(resultado, plan=modelo.leer_plan(solver))
+    aviso = "única" if estado == cp.INFEASIBLE else "sin_resultado"
+    return replace(resultado, aviso_variacion=aviso)
+
+
+def resolver(
+    contexto: Contexto,
+    segundos: float = 5.0,
+    *,
+    anterior: Asignaciones | None = None,
+) -> Resultado:
+    resultado = _optimizar(Modelo(contexto), segundos)
+    if resultado.plan and anterior and _turnos(resultado.plan) == _turnos(anterior):
+        return _buscar_alternativa(contexto, resultado, resultado.plan, segundos)
+    return resultado
