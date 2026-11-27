@@ -1,6 +1,6 @@
 # Resultados de la prueba de escritorio en Windows
 
-**Recomendación provisional.** Continuar la evaluación de NiceGUI con pywebview. La ventana real mostró 50 celdas editables y las dos ediciones ensayadas actualizaron las coordenadas correctas. El acceso directo arrancó desde el código y el servidor escuchó en bucle local. Antes de adoptar el stack falta observar la pestaña externa, arrancar la laptop desconectada y probar el acceso desde un segundo equipo. El solver tiene su propia prueba pendiente en la [fase 2](../../docs/roadmap.md).
+**Recomendación provisional.** Continuar la evaluación de NiceGUI con pywebview. La ventana real mostró 50 celdas editables y las dos ediciones ensayadas actualizaron las coordenadas correctas. El acceso directo arrancó desde el código y el servidor escuchó en bucle local. Antes de adoptar el stack falta observar la pestaña externa, arrancar la laptop desconectada y probar el acceso desde un segundo equipo. [Resultados de CP-SAT](../assignment_solver/RESULTADOS.md)
 
 ## Entorno y compatibilidad
 
