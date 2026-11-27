@@ -1,0 +1,22 @@
+[project]
+name = "generador-asignaciones-v2"
+version = "2.0.0.dev0"
+description = "Aplicación local para preparar el programa mensual de asignaciones."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "nicegui==4.1.0",
+    "pywebview==6.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.16,<1",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
