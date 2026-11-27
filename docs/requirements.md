@@ -54,7 +54,8 @@ El motor propuesto es OR-Tools CP-SAT, sujeto a la prueba de concepto. El orden 
 4. Evitar que una persona repita el mismo puesto durante el mes. Si alguna repetición es necesaria, penalizar más la concentración del puesto en una persona.
 5. Equilibrar la carga total del mes según las semanas disponibles entre los programas con igual variedad de puestos.
 6. Equilibrar la carga histórica entre programas equivalentes según los criterios anteriores.
-7. Favorecer el descanso, evitar repetir puesto en semanas consecutivas y rotar parejas.
+7. Minimizar los casos en que una persona sirve una tercera semana seguida, incluido el cruce de mes cuando se conoce el historial.
+8. Favorecer el descanso entre semanas, evitar repetir puesto en semanas consecutivas y rotar parejas.
 
 **Aceptación.** Con dos planes válidos de igual cobertura, preferir el que usa menos dobletes aun si el otro reparte mejor la carga. Una plaza sin candidatos se informa por semana y puesto y puede formar parte de una solución factible. Distinguir óptimo demostrado, factible sin prueba de optimalidad e inviabilidad demostrada. Si la búsqueda termina sin solución ni prueba de inviabilidad, expresar esa incertidumbre. Un bloqueo incompatible debe identificarse y nunca producir una solución aparentemente válida.
 

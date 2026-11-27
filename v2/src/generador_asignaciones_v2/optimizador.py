@@ -133,6 +133,31 @@ class Modelo:
                 costes.append(coste)
         return sum(costes)
 
+    def _servicio_semanal(self, persona: int, previas: int) -> list[int | cp.IntVar]:
+        semanas = self.contexto.semanas
+        if not semanas:
+            return []
+        anteriores = [
+            int(
+                self.contexto.historial.get((persona, semanas[0].inicio - timedelta(weeks=i)), 0)
+                > 0
+            )
+            for i in range(previas, 0, -1)
+        ]
+        return anteriores + [self.trabaja[persona, semana.inicio] for semana in semanas]
+
+    def descanso(self) -> cp.LinearExpr | int:
+        rachas = []
+        for persona in self.contexto.personas.values():
+            if not persona.activa:
+                continue
+            servicio = self._servicio_semanal(persona.id, previas=2)
+            for i in range(len(servicio) - 2):
+                racha = self.cp.new_bool_var("tres_seguidas")
+                self.cp.add_min_equality(racha, servicio[i : i + 3])
+                rachas.append(racha)
+        return sum(rachas)
+
     def rotacion(self) -> cp.LinearExpr | int:
         semanas = self.contexto.semanas
         if not semanas:
@@ -142,17 +167,10 @@ class Modelo:
         for persona in self.contexto.personas.values():
             if not persona.activa:
                 continue
-            previas = [
-                int(self.contexto.historial.get((persona.id, semanas[0].inicio - distancia), 0) > 0)
-                for distancia in (timedelta(weeks=2), timedelta(weeks=1))
-            ]
-            servicio = previas + [self.trabaja[persona.id, s.inicio] for s in semanas]
-            for i in range(len(semanas)):
-                racha = self.cp.new_bool_var("tres_seguidas")
-                self.cp.add_min_equality(racha, servicio[i : i + 3])
-                penas.append(3 * racha)
+            servicio = self._servicio_semanal(persona.id, previas=1)
+            for i in range(len(servicio) - 1):
                 seguida = self.cp.new_bool_var("servicio_consecutivo")
-                self.cp.add_min_equality(seguida, servicio[i + 1 : i + 3])
+                self.cp.add_min_equality(seguida, servicio[i : i + 2])
                 penas.append(seguida)
             for puesto in sorted(persona.puestos):
                 anterior = int(
@@ -189,7 +207,8 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
         "variedad de puestos",
         "carga del mes",
         "equidad histórica",
-        "descanso y parejas",
+        "descanso tras dos semanas",
+        "rotación de parejas y puestos",
     )
     for nombre in objetivos:
         if nombre == "cobertura":
@@ -202,6 +221,8 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
                 objetivo = modelo.equidad(incluir_historial=nombre == "equidad histórica")
             elif nombre == "variedad de puestos":
                 objetivo = modelo.variedad_puestos()
+            elif nombre == "descanso tras dos semanas":
+                objetivo = modelo.descanso()
             else:
                 objetivo = modelo.rotacion()
             modelo.cp.minimize(objetivo)
@@ -209,7 +230,10 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
         # La variedad se resuelve antes de agregar las variables de las parejas.
         preferencias = nombre not in ("cobertura", "dobletes")
         solver.parameters.max_time_in_seconds = segundos * (
-            2 if nombre in ("variedad de puestos", "descanso y parejas") else 1
+            2
+            if nombre
+            in ("variedad de puestos", "descanso tras dos semanas", "rotación de parejas y puestos")
+            else 1
         )
         solver.parameters.num_search_workers = 4 if preferencias else 1
         solver.parameters.random_seed = 73

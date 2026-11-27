@@ -22,7 +22,7 @@ Para diagnosticar un fallo de inicio desde la raíz, ejecuta `.\v2\venv\Scripts\
 
 1. Elige el mes y pulsa **Cargar mes**. En **Importar V1**, indica la ruta de una copia privada de la carpeta que contiene `hermanos.json`. Revisa el resultado antes de aplicar. El alcance incluye el padrón, las ausencias del mes y el historial JSON comprobable de los tres meses anteriores. Si V1 indica un grupo inicial para ese periodo, la importación lo muestra para trasladarlo al calendario.
 2. En **Padrón**, actualiza las capacitaciones y registra ausencias de semanas completas. En **Programa mensual**, ajusta reuniones, puestos desactivados y grupos si corresponde.
-3. Pulsa **Generar mes**. Corrige las plazas que hagan falta y pulsa **Guardar borrador**. Para intercambiar personas, ajusta las dos plazas antes de guardar.
+3. Pulsa **Generar mes** y revisa **Carga y descanso** para ver las asignaciones y la mayor racha por persona. El resumen refleja las ediciones del borrador. Para intercambiar personas, ajusta las dos plazas antes de pulsar **Guardar borrador**.
 4. Pulsa **Publicar**. Si hay vacantes, revisa la lista antes de confirmar. **Exportar Excel** guarda las hojas «Programa General» y «Audio y Video» de la última versión publicada en `exportaciones`, junto a la base local. Las correcciones posteriores aparecen en el Excel al publicar una nueva versión.
 
 ## Base local y respaldo

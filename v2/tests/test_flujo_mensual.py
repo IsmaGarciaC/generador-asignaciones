@@ -13,11 +13,13 @@ from sqlalchemy.exc import IntegrityError
 
 from exportador_excel import exportar_programa_excel
 from generador_asignaciones_v2.dominio.programa import (
+    CargaPersona,
     Contexto,
     Persona,
     Semana,
     grupos_semanales,
     martes_del_mes,
+    resumir_carga,
 )
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 from generador_asignaciones_v2.flujo_mensual import exportar, generar
@@ -164,6 +166,45 @@ def test_historial_desempata_sin_concentrar_puestos_con_igual_carga_mensual() ->
     assert len(usos) == len(resultado.plan) == 6
 
 
+def test_descanso_evitar_una_tercera_semana_consecutiva_al_cambiar_de_mes() -> None:
+    fecha = date(2026, 12, 1)
+    puestos = frozenset({Puesto.AUDIO})
+    contexto = Contexto(
+        (Semana(fecha, desactivados=frozenset(set(Puesto) - puestos)),),
+        {i: Persona(i, f"Persona {i}", puestos) for i in (1, 2)},
+        historial={
+            (1, date(2026, 11, 17)): 1,
+            (1, date(2026, 11, 24)): 1,
+            (2, date(2026, 11, 3)): 1,
+            (2, date(2026, 11, 10)): 1,
+        },
+    )
+    resultado = resolver(contexto)
+    assert resultado.plan == {(fecha, Puesto.AUDIO, 1): 2}
+    assert resultado.objetivos_probados[-2:] == (
+        "descanso tras dos semanas",
+        "rotación de parejas y puestos",
+    )
+
+
+def test_resumen_cuenta_doblete_en_una_semana_y_racha_del_mes_anterior() -> None:
+    fechas = martes_del_mes(2026, 12)[:3]
+    contexto = Contexto(
+        tuple(map(Semana, fechas)),
+        {1: Persona(1, "Persona 1"), 2: Persona(2, "Persona 2")},
+        historial={(1, date(2026, 11, 17)): 1, (1, date(2026, 11, 24)): 2},
+    )
+    plan = {
+        (fechas[0], Puesto.LECTOR_MARTES, 1): 1,
+        (fechas[0], Puesto.MICROFONOS, 1): 1,
+        (fechas[2], Puesto.PRESIDENTE, 1): 1,
+    }
+    assert resumir_carga(contexto, plan) == {
+        1: CargaPersona(3, (fechas[0], fechas[2]), 3),
+        2: CargaPersona(0, (), 0),
+    }
+
+
 def test_motor_prioriza_no_repetir_puesto_aun_si_la_carga_total_es_distinta() -> None:
     roles = (Puesto.AUDIO, Puesto.VIDEO, Puesto.PLATAFORMA)
     puestos = frozenset(roles)
@@ -172,8 +213,7 @@ def test_motor_prioriza_no_repetir_puesto_aun_si_la_carga_total_es_distinta() ->
         for fecha in martes_del_mes(2026, 12)[:3]
     )
     personas = {
-        i: Persona(i, f"Persona {i}", frozenset({puesto}))
-        for i, puesto in enumerate(roles, 1)
+        i: Persona(i, f"Persona {i}", frozenset({puesto})) for i, puesto in enumerate(roles, 1)
     }
     personas.update({i: Persona(i, f"Persona {i}", puestos) for i in (4, 5)})
     contexto = Contexto(semanas, personas)

@@ -12,7 +12,13 @@ from nicegui import app, html, run, ui
 from nicegui.events import ValueChangeEventArguments
 from sqlalchemy.exc import SQLAlchemyError
 
-from generador_asignaciones_v2.dominio.programa import Borrador, Semana, grupos_semanales
+from generador_asignaciones_v2.dominio.programa import (
+    Asignaciones,
+    Borrador,
+    Semana,
+    grupos_semanales,
+    resumir_carga,
+)
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 from generador_asignaciones_v2.flujo_mensual import exportar, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
@@ -105,9 +111,7 @@ def _matriz(vista: VistaMes) -> dict:
                                     opciones = {i: nombres[i] for i in candidatos}
                                     if persona is not None and persona not in opciones:
                                         opciones[persona] = f"{nombres[persona]} · revisar"
-                                    control = ui.select(
-                                        opciones, value=persona, clearable=True
-                                    )
+                                    control = ui.select(opciones, value=persona, clearable=True)
                                     controles[plaza] = control
                                     control.mark(f"plaza-{semana.inicio}-{puesto.value}-{numero}")
                                     control.props(
@@ -172,23 +176,71 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
                 calendario[semana.inicio] = (martes, domingo, inactivos)
     controles = _matriz(vista)
 
-    def tomar() -> Borrador:
-        if any(c.value is None or int(c.value) != c.value for c in (cantidad, inicial)):
-            raise ValueError("Escribe números enteros para los grupos.")
-        semanas = tuple(
+    def semanas_editadas() -> tuple[Semana, ...]:
+        return tuple(
             Semana(fecha, martes.value, domingo.value, frozenset(map(Puesto, desactivados.value)))
             for fecha, (martes, domingo, desactivados) in calendario.items()
         )
+
+    def asignaciones_visibles(semanas: tuple[Semana, ...]) -> Asignaciones:
         requeridas = {plaza for semana in semanas for plaza in semana.plazas()}
-        plan = {
+        return {
             plaza: c.value
             for plaza, c in controles.items()
             if c.value is not None and plaza in requeridas
         }
+
+    @ui.refreshable
+    def resumen() -> None:
+        semanas = semanas_editadas()
+        plan = asignaciones_visibles(semanas)
+        if not plan:
+            ui.label("Genera o edita el borrador para ver el reparto.")
+            return
+        cargas = resumir_carga(replace(vista.contexto, semanas=semanas), plan)
+        nombres = _nombres(vista)
+        personas = sorted(
+            cargas, key=lambda i: (-cargas[i].racha_maxima, -cargas[i].asignaciones, nombres[i])
+        )
+        con_racha = sum(c.racha_maxima >= 3 for c in cargas.values())
+        ui.label(f"Personas con tres o más semanas seguidas: {con_racha}")
+        columnas = [
+            {"name": "persona", "label": "Persona", "field": "persona", "align": "left"},
+            {"name": "total", "label": "Asignaciones", "field": "total", "sortable": True},
+            {"name": "semanas", "label": "Semanas del mes", "field": "semanas"},
+            {"name": "racha", "label": "Mayor racha", "field": "racha", "sortable": True},
+        ]
+        filas = [
+            {
+                "id": i,
+                "persona": nombres[i],
+                "total": cargas[i].asignaciones,
+                "semanas": ", ".join(f"{fecha:%d/%m}" for fecha in cargas[i].semanas) or "—",
+                "racha": cargas[i].racha_maxima,
+            }
+            for i in personas
+        ]
+        ui.table(columns=columnas, rows=filas, row_key="id").props("dense").classes("w-full")
+        ui.label("La mayor racha incluye semanas anteriores cuando se conoce el servicio.").classes(
+            "text-sm text-slate-600"
+        )
+
+    with ui.expansion("Carga y descanso", icon="bar_chart").classes("w-full bg-white"):
+        resumen()
+    for control in controles.values():
+        control.on_value_change(lambda: resumen.refresh())
+    for grupo in calendario.values():
+        for control in grupo:
+            control.on_value_change(lambda: resumen.refresh())
+
+    def tomar() -> Borrador:
+        if any(c.value is None or int(c.value) != c.value for c in (cantidad, inicial)):
+            raise ValueError("Escribe números enteros para los grupos.")
+        semanas = semanas_editadas()
         return replace(
             borrador,
             semanas=semanas,
-            plan=plan,
+            plan=asignaciones_visibles(semanas),
             num_grupos=int(cantidad.value),
             grupo_inicial=int(inicial.value),
         )

@@ -15,9 +15,7 @@ from generador_asignaciones_v2.persistencia.base_datos import BaseDatos
 from generador_asignaciones_v2.persistencia.programas import Programas
 
 
-def test_boton_crea_y_confirma_un_respaldo(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_boton_crea_y_confirma_un_respaldo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     with closing(BaseDatos(tmp_path / "programa.sqlite3")) as base:
         base.preparar()
@@ -33,15 +31,21 @@ def test_boton_crea_y_confirma_un_respaldo(
 
 
 def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     respaldo = tmp_path / "Copia V1"
     respaldo.mkdir()
-    (respaldo / "hermanos.json").write_text(json.dumps([
-        {"id": 1, "nombre": "Persona Uno", "roles": ["audio"]},
-        {"id": 2, "nombre": "Persona Dos", "roles": ["audio"]},
-    ]), encoding="utf-8")
+    (respaldo / "hermanos.json").write_text(
+        json.dumps(
+            [
+                {"id": 1, "nombre": "Persona Uno", "roles": ["audio"]},
+                {"id": 2, "nombre": "Persona Dos", "roles": ["audio"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
     with closing(BaseDatos(tmp_path / "privado" / "programa.sqlite3")) as base:
         base.preparar()
         programas = Programas(base)
@@ -69,6 +73,16 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 nombre = generado.contexto.personas[otra].nombre
                 usuario.find(kind=ui.select, marker=f"plaza-{fecha}-audio-1").click()
                 usuario.find(nombre).click()
+                usuario.find("Carga y descanso").click()
+                await usuario.should_see(kind=ui.table)
+                esperado = tuple(generado.borrador.plan.values()).count(otra) + 1
+                for _ in range(20):
+                    (tabla,) = usuario.find(kind=ui.table).elements
+                    if any(f["id"] == otra and f["total"] == esperado for f in tabla.rows):
+                        break
+                    await asyncio.sleep(0.1)
+                else:
+                    pytest.fail("El resumen no reflejó la edición antes del guardado.")
                 usuario.find("Guardar borrador").click()
                 await usuario.should_see("Borrador guardado")
                 assert programas.leer(hoy.year, hoy.month).borrador.plan[plaza] == otra
