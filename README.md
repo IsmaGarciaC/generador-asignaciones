@@ -1,5 +1,7 @@
 # ⚡ Generador de Asignaciones (Congregation Dispatcher)
 
+Para instalar y ejecutar la versión en desarrollo, consulta la [guía de la V2](v2/README.md). Las secciones siguientes describen la V1.
+
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean_Architecture-orange?style=flat)]()
 [![Build](https://img.shields.io/badge/Build-PyInstaller-success?style=flat)]()

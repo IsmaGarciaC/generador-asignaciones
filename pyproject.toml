@@ -20,6 +20,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+src = ["src", "v2/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "W", "I"]

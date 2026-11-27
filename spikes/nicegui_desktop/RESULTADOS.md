@@ -1,6 +1,6 @@
 # Resultados de la prueba de escritorio en Windows
 
-**Recomendación provisional.** Continuar la evaluación de NiceGUI con pywebview. La ventana real mostró 50 celdas editables y las dos ediciones ensayadas actualizaron las coordenadas correctas. El acceso directo arrancó desde el código y el servidor escuchó en bucle local. Antes de adoptar el stack falta observar la pestaña externa, arrancar la laptop desconectada y probar el acceso desde un segundo equipo. [Resultados de CP-SAT](../assignment_solver/RESULTADOS.md)
+**Decisión.** Adoptar NiceGUI con pywebview. La ventana real mostró 50 celdas editables y las dos ediciones ensayadas actualizaron las coordenadas correctas. El acceso directo arrancó desde el código y el servidor escuchó en bucle local. El usuario confirmó el arranque desconectado, la apertura del navegador externo para WhatsApp y que un segundo equipo de la red quedó sin acceso. [Resultados de CP-SAT](../assignment_solver/RESULTADOS.md)
 
 ## Entorno y compatibilidad
 
@@ -33,8 +33,8 @@ El arranque fija `native=True`, `host='127.0.0.1'` y `reload=False`. WebView2 pr
 | Botón externo | Pulsar el botón dentro de WebView2 y observar la llamada real a `webbrowser.open` | Windows aceptó `https://wa.me/` con resultado `True`. La ventana nativa siguió en la URL local con sus 50 selectores. La automatización no identificó la pestaña del navegador externo. |
 | Aislamiento | Comprobar el prefijo del intérprete, las dependencias y el estado de Git | El entorno reside en esta carpeta. Los archivos versionados de la aplicación heredada no presentan cambios. |
 
-## Incidencias y validación pendiente
+## Incidencias y validación manual
 
 - La consola de la prueba no resolvía `py` ni `python` por nombre. Se utilizó la ruta del intérprete base de 3.12.10. La política de PowerShell también bloqueó un archivo `.ps1` de preparación. El generador de acceso entregado usa `.cmd` y se verificaron su destino, argumento y directorio de trabajo.
 - Un primer intento de editar la esquina inferior mediante accesibilidad no recuperó el resumen esperado. Se repitió sobre el DOM de WebView2 y se contrastó el resultado con el diccionario Python. Una solicitud de cierre mediante `CloseMainWindow` tampoco liberó la instancia en el tiempo observado. El cierre por el control nativo y el ensayo instrumentado posterior sí liberaron el servidor.
-- La confirmación visual de la pestaña de WhatsApp, la apertura con desconexión física y la conexión desde otro dispositivo siguen pendientes. El doble clic físico y el cierre con la X se pueden reproducir en la misma revisión de usuario. El [checklist de Windows](README.md#checklist-manual-en-windows) detalla cómo comprobarlos.
+- La validación manual confirmada por el usuario completó las tres comprobaciones que quedaban. El [checklist de Windows](README.md#checklist-manual-en-windows) conserva los pasos para reproducirlas.
