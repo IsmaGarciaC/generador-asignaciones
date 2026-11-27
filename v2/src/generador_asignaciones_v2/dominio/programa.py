@@ -1,9 +1,9 @@
 """Calendario, rotación y validez de un borrador mensual."""
 
 from calendar import monthrange
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from generador_asignaciones_v2.dominio.puestos import (
     CUPOS_HABITUALES,
@@ -73,6 +73,7 @@ class Contexto:
     ausencias: frozenset[tuple[int, date]] = frozenset()
     # Solo incluye semanas de disponibilidad conocida. El valor es el número de servicios.
     historial: dict[tuple[int, date], int] = field(default_factory=dict)
+    puestos_historicos: frozenset[tuple[int, date, Puesto]] = frozenset()
 
     def plazas(self) -> tuple[Plaza, ...]:
         return tuple(plaza for semana in self.semanas for plaza in semana.plazas())
@@ -102,6 +103,41 @@ class Contexto:
                 nombre = persona.nombre if persona else str(persona_id)
                 errores.append(f"{inicio:%d/%m} · {nombre}: combinación de puestos prohibida.")
         return errores
+
+
+@dataclass(frozen=True)
+class CargaPersona:
+    asignaciones: int
+    semanas: tuple[date, ...]
+    racha_maxima: int
+
+
+def resumir_carga(contexto: Contexto, plan: Asignaciones) -> dict[int, CargaPersona]:
+    """Cuenta asignaciones y semanas de servicio, incluidas rachas que cruzan de mes."""
+    asignaciones = Counter(plan.values())
+    fechas_por_persona = defaultdict(set)
+    for (fecha, _, _), persona in plan.items():
+        fechas_por_persona[persona].add(fecha)
+    anteriores = defaultdict(set)
+    primer_martes = contexto.semanas[0].inicio if contexto.semanas else date.min
+    for (persona, fecha), cantidad in contexto.historial.items():
+        if cantidad and fecha < primer_martes:
+            anteriores[persona].add(fecha)
+
+    resumen = {}
+    for persona in contexto.personas.values():
+        if not persona.activa and persona.id not in asignaciones:
+            continue
+        fechas = fechas_por_persona[persona.id]
+        ultima = None
+        racha = maxima = 0
+        for fecha in sorted(anteriores[persona.id] | fechas):
+            racha = racha + 1 if ultima is not None and fecha - ultima == timedelta(weeks=1) else 1
+            if fecha in fechas:
+                maxima = max(maxima, racha)
+            ultima = fecha
+        resumen[persona.id] = CargaPersona(asignaciones[persona.id], tuple(sorted(fechas)), maxima)
+    return resumen
 
 
 @dataclass(frozen=True)

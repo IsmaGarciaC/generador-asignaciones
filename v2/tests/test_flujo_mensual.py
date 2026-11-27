@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
@@ -12,11 +13,13 @@ from sqlalchemy.exc import IntegrityError
 
 from exportador_excel import exportar_programa_excel
 from generador_asignaciones_v2.dominio.programa import (
+    CargaPersona,
     Contexto,
     Persona,
     Semana,
     grupos_semanales,
     martes_del_mes,
+    resumir_carga,
 )
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 from generador_asignaciones_v2.flujo_mensual import exportar, generar
@@ -102,6 +105,162 @@ def test_motor_maximiza_cobertura_y_distingue_incertidumbre() -> None:
     assert resolver(contexto, segundos=0).estado == "UNKNOWN"
 
 
+def test_motor_alterna_el_mismo_puesto_desde_la_ultima_semana_del_mes_anterior() -> None:
+    fechas = martes_del_mes(2026, 12)[:4]
+    anterior = fechas[0] - timedelta(weeks=1)
+    semanas = tuple(
+        Semana(fecha, desactivados=frozenset(set(Puesto) - {Puesto.AUDIO})) for fecha in fechas
+    )
+    contexto = Contexto(
+        semanas,
+        {i: Persona(i, f"Persona {i}", frozenset({Puesto.AUDIO})) for i in (1, 2)},
+        historial={(1, anterior): 1, (2, anterior): 1},
+        puestos_historicos=frozenset({(1, anterior, Puesto.AUDIO)}),
+    )
+    resultado = resolver(contexto)
+    assert resultado.estado == "OPTIMAL"
+    assert resultado.plan is not None
+    assert [resultado.plan[fecha, Puesto.AUDIO, 1] for fecha in fechas] == [2, 1, 2, 1]
+
+
+@pytest.mark.parametrize("personas, frecuencias", [(5, [2] * 5), (10, [1] * 10)])
+def test_motor_reparte_las_diez_plazas_del_mismo_puesto_en_todo_el_mes(
+    personas: int,
+    frecuencias: list[int],
+) -> None:
+    puestos = frozenset({Puesto.MICROFONOS, Puesto.ACOMODADOR})
+    contexto = Contexto(
+        tuple(
+            Semana(fecha, desactivados=frozenset(set(Puesto) - puestos))
+            for fecha in martes_del_mes(2026, 12)
+        ),
+        {i: Persona(i, f"Persona {i}", puestos) for i in range(1, personas + 1)},
+    )
+    resultado = resolver(contexto)
+    assert resultado.plan is not None
+    assert len(resultado.plan) == 20
+    assert not contexto.validar(resultado.plan)
+    for puesto in puestos:
+        conteos = Counter(i for (_, rol, _), i in resultado.plan.items() if rol == puesto)
+        assert sorted(conteos.values()) == frecuencias
+
+
+def test_historial_desempata_sin_concentrar_puestos_con_igual_carga_mensual() -> None:
+    puestos = frozenset({Puesto.AUDIO, Puesto.VIDEO})
+    fechas = martes_del_mes(2026, 12)[:3]
+    contexto = Contexto(
+        tuple(Semana(f, desactivados=frozenset(set(Puesto) - puestos)) for f in fechas),
+        {
+            1: Persona(1, "Persona 1", frozenset({Puesto.AUDIO})),
+            2: Persona(2, "Persona 2", frozenset({Puesto.VIDEO})),
+            3: Persona(3, "Persona 3", puestos),
+            4: Persona(4, "Persona 4", puestos),
+        },
+        historial={(3, date(2026, 11, 24)): 2, (4, date(2026, 11, 24)): 2},
+    )
+    resultado = resolver(contexto)
+    assert resultado.estado == "OPTIMAL"
+    assert resultado.plan is not None
+    assert sorted(Counter(resultado.plan.values()).values()) == [1, 1, 2, 2]
+    usos = {(puesto, persona) for (_, puesto, _), persona in resultado.plan.items()}
+    assert len(usos) == len(resultado.plan) == 6
+
+
+def test_descanso_evitar_una_tercera_semana_consecutiva_al_cambiar_de_mes() -> None:
+    fecha = date(2026, 12, 1)
+    puestos = frozenset({Puesto.AUDIO})
+    contexto = Contexto(
+        (Semana(fecha, desactivados=frozenset(set(Puesto) - puestos)),),
+        {i: Persona(i, f"Persona {i}", puestos) for i in (1, 2)},
+        historial={
+            (1, date(2026, 11, 17)): 1,
+            (1, date(2026, 11, 24)): 1,
+            (2, date(2026, 11, 3)): 1,
+            (2, date(2026, 11, 10)): 1,
+        },
+    )
+    resultado = resolver(contexto)
+    assert resultado.plan == {(fecha, Puesto.AUDIO, 1): 2}
+    assert resultado.objetivos_probados[-2:] == (
+        "descanso tras dos semanas",
+        "rotación de parejas y puestos",
+    )
+
+
+def test_resumen_cuenta_doblete_en_una_semana_y_racha_del_mes_anterior() -> None:
+    fechas = martes_del_mes(2026, 12)[:3]
+    contexto = Contexto(
+        tuple(map(Semana, fechas)),
+        {1: Persona(1, "Persona 1"), 2: Persona(2, "Persona 2")},
+        historial={(1, date(2026, 11, 17)): 1, (1, date(2026, 11, 24)): 2},
+    )
+    plan = {
+        (fechas[0], Puesto.LECTOR_MARTES, 1): 1,
+        (fechas[0], Puesto.MICROFONOS, 1): 1,
+        (fechas[2], Puesto.PRESIDENTE, 1): 1,
+    }
+    assert resumir_carga(contexto, plan) == {
+        1: CargaPersona(3, (fechas[0], fechas[2]), 3),
+        2: CargaPersona(0, (), 0),
+    }
+
+
+def test_motor_prioriza_no_repetir_puesto_aun_si_la_carga_total_es_distinta() -> None:
+    roles = (Puesto.AUDIO, Puesto.VIDEO, Puesto.PLATAFORMA)
+    puestos = frozenset(roles)
+    semanas = tuple(
+        Semana(fecha, desactivados=frozenset(set(Puesto) - puestos))
+        for fecha in martes_del_mes(2026, 12)[:3]
+    )
+    personas = {
+        i: Persona(i, f"Persona {i}", frozenset({puesto})) for i, puesto in enumerate(roles, 1)
+    }
+    personas.update({i: Persona(i, f"Persona {i}", puestos) for i in (4, 5)})
+    contexto = Contexto(semanas, personas)
+    resultado = resolver(contexto)
+    assert resultado.plan is not None
+    assert len(resultado.plan) == 9
+    assert not contexto.validar(resultado.plan)
+    usos = {(puesto, persona) for (_, puesto, _), persona in resultado.plan.items()}
+    assert len(usos) == 9
+    assert sorted(Counter(resultado.plan.values()).values()) == [1, 1, 1, 3, 3]
+
+
+def test_regenerar_mes_guarda_un_reparto_distinto_con_igual_calidad(programas: Programas) -> None:
+    puestos = frozenset({Puesto.AUDIO, Puesto.VIDEO})
+    for i in (1, 2):
+        programas.guardar_persona(None, f"Persona {i}", "", puestos, True)
+    vista = programas.leer(2026, 12)
+    semanas = tuple(
+        Semana(s.inicio, martes=False, domingo=False)
+        if i > 1
+        else Semana(s.inicio, desactivados=frozenset(set(Puesto) - puestos))
+        for i, s in enumerate(vista.borrador.semanas)
+    )
+    primero = generar(programas, vista, replace(vista.borrador, semanas=semanas))
+    vista = programas.leer(2026, 12)
+    siguiente = generar(programas, vista, vista.borrador)
+    assert primero.plan is not None and siguiente.plan is not None
+    assert primero.estado == siguiente.estado == "OPTIMAL"
+    assert len(primero.plan) == len(siguiente.plan) == 4
+    assert all(primero.plan[plaza] != i for plaza, i in siguiente.plan.items())
+    assert len({(puesto, i) for (_, puesto, _), i in siguiente.plan.items()}) == 4
+    assert programas.leer(2026, 12).borrador.plan == siguiente.plan
+
+
+def test_intercambiar_cupos_equivalentes_no_cuenta_como_otra_propuesta() -> None:
+    fecha = date(2026, 12, 1)
+    puesto = Puesto.MICROFONOS
+    contexto = Contexto(
+        (Semana(fecha, desactivados=frozenset(set(Puesto) - {puesto})),),
+        {i: Persona(i, f"Persona {i}", frozenset({puesto})) for i in (1, 2)},
+    )
+    anterior = {(fecha, puesto, 1): 2, (fecha, puesto, 2): 1}
+    resultado = resolver(contexto, anterior=anterior)
+    assert resultado.plan == {(fecha, puesto, 1): 1, (fecha, puesto, 2): 2}
+    assert resultado.aviso_variacion == "única"
+
+
 def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):
     copia = tmp_path / "Copia V1"
     crear_copia(copia)
@@ -117,6 +276,7 @@ def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, 
     assert programas.leer(2026, 11).historico
     vista = programas.leer(2026, 12)
     assert vista.contexto.historial[1, date(2026, 11, 3)] == 2
+    assert (1, date(2026, 11, 3), Puesto.VIDEO) in vista.contexto.puestos_historicos
     assert (2, date(2026, 11, 3)) not in vista.contexto.historial
 
     semanas = list(vista.borrador.semanas)

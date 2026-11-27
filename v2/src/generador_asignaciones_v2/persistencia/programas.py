@@ -64,7 +64,9 @@ def _personas(sesion: Session) -> dict[int, Persona]:
 
 def _historial(
     sesion: Session, anio: int, mes: int, ausencias: frozenset[tuple[int, date]]
-) -> tuple[dict[tuple[int, date], int], tuple[int, int] | None]:
+) -> tuple[
+    dict[tuple[int, date], int], frozenset[tuple[int, date, Puesto]], tuple[int, int] | None
+]:
     meses = meses_anteriores(anio, mes)
     programas = sesion.scalars(
         select(Programa)
@@ -72,6 +74,7 @@ def _historial(
         .order_by(Programa.anio, Programa.mes)
     ).all()
     historial = {}
+    puestos = set()
     rotacion = None
     for programa in programas:
         publicada = _publicacion(sesion, programa.id)
@@ -79,22 +82,26 @@ def _historial(
             for semana in publicada.contenido["semanas"]:
                 inicio = date.fromisoformat(semana["inicio"])
                 servicios = Counter(plaza["persona"] for plaza in semana["plazas"])
+                puestos.update(
+                    (plaza["persona"], inicio, Puesto(plaza["puesto"]))
+                    for plaza in semana["plazas"]
+                    if plaza["persona"] is not None
+                )
                 for persona in semana["disponibles"]:
                     historial[persona, inicio] = servicios[persona]
                 if semana["limpieza"] is not None:
                     cantidad = publicada.contenido["num_grupos"]
                     rotacion = (cantidad, semana["limpieza"] % cantidad + 1)
         elif programa.historico:
-            servicios = Counter(
-                (a.hermano_id, a.inicio_semana)
-                for a in sesion.scalars(
-                    select(Asignacion).where(
-                        Asignacion.programa_id == programa.id, Asignacion.hermano_id.is_not(None)
-                    )
+            filas = sesion.scalars(
+                select(Asignacion).where(
+                    Asignacion.programa_id == programa.id, Asignacion.hermano_id.is_not(None)
                 )
-            )
+            ).all()
+            servicios = Counter((a.hermano_id, a.inicio_semana) for a in filas)
+            puestos.update((a.hermano_id, a.inicio_semana, a.puesto) for a in filas)
             historial.update({clave: n for clave, n in servicios.items() if clave not in ausencias})
-    return historial, rotacion
+    return historial, frozenset(puestos), rotacion
 
 
 def _vista(sesion: Session, anio: int, mes: int, programa: Programa | None) -> VistaMes:
@@ -110,14 +117,19 @@ def _vista(sesion: Session, anio: int, mes: int, programa: Programa | None) -> V
             )
         )
     )
-    historial, rotacion = _historial(sesion, anio, mes, ausencias)
+    historial, puestos_historicos, rotacion = _historial(sesion, anio, mes, ausencias)
     personas = _personas(sesion)
     if programa is None:
         semanas = tuple(Semana(fecha) for fecha in fechas)
         cantidad, inicial = rotacion or (4, 1)
         borrador = Borrador(anio, mes, semanas, num_grupos=cantidad, grupo_inicial=inicial)
         return VistaMes(
-            borrador, Contexto(semanas, personas, ausencias, historial), None, None, False, False
+            borrador,
+            Contexto(semanas, personas, ausencias, historial, puestos_historicos),
+            None,
+            None,
+            False,
+            False,
         )
 
     filas = {
@@ -141,7 +153,7 @@ def _vista(sesion: Session, anio: int, mes: int, programa: Programa | None) -> V
     publicada = _publicacion(sesion, programa.id)
     return VistaMes(
         borrador,
-        Contexto(semanas, personas, ausencias, historial),
+        Contexto(semanas, personas, ausencias, historial, puestos_historicos),
         programa.revision,
         publicada.version if publicada else None,
         publicada is not None and publicada.revision_borrador == programa.revision,

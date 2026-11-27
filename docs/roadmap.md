@@ -8,7 +8,7 @@ Las entregas se organizan por lo que la persona puede hacer en la aplicación. L
 - Fase 2 completada. Se adoptaron Python 3.12 x64 en Windows, NiceGUI con pywebview y OR-Tools CP-SAT. El usuario confirmó el arranque desconectado, el rechazo de acceso desde otro equipo y la apertura externa de WhatsApp. [Resultados de escritorio](../spikes/nicegui_desktop/RESULTADOS.md) · [Resultados del solver](../spikes/assignment_solver/RESULTADOS.md)
 - Fase 3 completada con paquete V2 independiente, catálogo semanal y regla de dobletes. Se comprobó el arranque desde el acceso directo con escucha en `127.0.0.1`. Pytest y Ruff se ejecutan en Windows mediante GitHub Actions. [Guía de la V2](../v2/README.md)
 - Ya se implementaron SQLite, SQLAlchemy, migraciones y respaldos. Los ensayos con datos ficticios conservan identidades y referencias, revierten escrituras interrumpidas y recuperan el programa en otra ubicación privada. [Respaldo y recuperación](../v2/README.md#base-local-y-respaldo)
-- El flujo mensual reúne importación verificable, padrón, calendario, CP-SAT, edición, publicación y Excel. La equidad usa provisionalmente la fórmula del spike con el historial disponible (D-03). [Flujo mensual](../v2/README.md#preparar-un-programa-mensual)
+- El flujo mensual reúne importación verificable, padrón, calendario, CP-SAT, edición, publicación y Excel. Tras la cobertura y los dobletes, se prioriza evitar repetir puesto. La carga mensual y la equidad histórica desempatan en ese orden (D-03). [Flujo mensual](../v2/README.md#preparar-un-programa-mensual)
 
 ## Punto de partida
 
@@ -25,6 +25,6 @@ Las entregas se organizan por lo que la persona puede hacer en la aplicación. L
 | Entrega | Resultado verificable |
 | --- | --- |
 | Preparar y emitir el mes en Excel | Cargar el padrón y el historial reciente verificable desde un respaldo, configurar reuniones y ausencias, generar meses de cuatro y cinco semanas, editar, publicar, reabrir y exportar. Verificar el cruce de año, la reversión de cambios inválidos, las vacantes, la estabilidad de los grupos y la equivalencia de ambas hojas con V1. |
-| Completar importación y edición | Conciliar fuentes históricas JSON y Excel según RF-12 y D-07. Completar bloqueos y regeneración selectiva según RF-09. Resolver D-03 con alternativas de igual cobertura y D-04 con cambios de rotación que preserven programas confirmados. |
+| Completar importación y edición | Conciliar fuentes históricas JSON y Excel según RF-12 y D-07. Completar bloqueos y regeneración selectiva según RF-09. Resolver D-04 con cambios de rotación que preserven programas confirmados. |
 | Completar salidas y recordatorios | Emitir PDF y PNG desde la misma publicación y verificar la impresión de ambas hojas según RF-11. Abrir la ronda semanal publicada, confirmar envíos y preservar su registro según RF-10. |
 | Distribuir V2.0.0 | Ensayar en la laptop el flujo completo sin Internet, restaurar un respaldo y revisar el paquete de Windows para excluir datos reales. Cerrar los criterios RF y RNF que faltan. |

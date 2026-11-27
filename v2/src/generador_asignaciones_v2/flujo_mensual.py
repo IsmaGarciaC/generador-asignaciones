@@ -16,7 +16,7 @@ def generar(programas: Programas, vista: VistaMes, borrador: Borrador) -> Result
         raise ValueError("El historial importado se conserva para consulta.")
     if not vista.contexto.personas:
         raise ValueError("Agrega o importa el padrón antes de generar.")
-    resultado = resolver(replace(vista.contexto, semanas=borrador.semanas))
+    resultado = resolver(replace(vista.contexto, semanas=borrador.semanas), anterior=borrador.plan)
     if resultado.plan is not None:
         programas.guardar(vista, replace(borrador, plan=resultado.plan))
     return resultado

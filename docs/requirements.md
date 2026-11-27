@@ -51,8 +51,11 @@ El motor propuesto es OR-Tools CP-SAT, sujeto a la prueba de concepto. El orden 
 1. Cumplir todas las restricciones obligatorias.
 2. Maximizar las plazas requeridas cubiertas en el mes.
 3. Minimizar los dobletes excepcionales.
-4. Equilibrar la carga histórica.
-5. Favorecer descanso y rotación.
+4. Evitar que una persona repita el mismo puesto durante el mes. Si alguna repetición es necesaria, penalizar más la concentración del puesto en una persona.
+5. Equilibrar la carga total del mes según las semanas disponibles entre los programas con igual variedad de puestos.
+6. Equilibrar la carga histórica entre programas equivalentes según los criterios anteriores.
+7. Minimizar los casos en que una persona sirve una tercera semana seguida, incluido el cruce de mes cuando se conoce el historial.
+8. Favorecer el descanso entre semanas, evitar repetir puesto en semanas consecutivas y rotar parejas.
 
 **Aceptación.** Con dos planes válidos de igual cobertura, preferir el que usa menos dobletes aun si el otro reparte mejor la carga. Una plaza sin candidatos se informa por semana y puesto y puede formar parte de una solución factible. Distinguir óptimo demostrado, factible sin prueba de optimalidad e inviabilidad demostrada. Si la búsqueda termina sin solución ni prueba de inviabilidad, expresar esa incertidumbre. Un bloqueo incompatible debe identificarse y nunca producir una solución aparentemente válida.
 
@@ -118,7 +121,7 @@ Migrar todos los datos recuperables mediante un script de una sola ejecución. I
 | --- | --- | --- |
 | D-01 | Aplicabilidad de los puestos al cancelar una reunión y adscripción de semanas limítrofes. | Se confirmó que la semana pertenece al mes de su martes. El flujo aplica las cancelaciones parciales descritas en RF-03 para su validación en uso. |
 | D-02 | Publicación y correcciones posteriores. | Se permite publicar con vacantes tras ver el detalle y confirmar. Una edición posterior se guarda en borrador y la última publicación sigue vigente hasta volver a publicar. |
-| D-03 | Cálculo de equidad con información incompleta. | Acordar cómo comparar conteo y proporción, tratar disponibilidad desconocida o denominador cero y desempatar preferencias del mismo nivel. |
+| D-03 | Cálculo de equidad con información incompleta. | Se prioriza evitar repetir puesto durante el mes, seguido del reparto de carga mensual y la equidad histórica. La métrica de equidad usa asignaciones y semanas trabajadas en relación con las oportunidades conocidas. Una semana desconocida queda fuera del denominador y una persona con cero oportunidades aporta cero al coste. |
 | D-04 | Cambios posteriores en la rotación. | Acordar desde qué semana surte efecto un cambio de número de grupos, de grupo inicial o de cancelación cuando ya existen meses posteriores. Preservar el historial confirmado. |
 | D-05 | Operación de la ronda semanal. | Precisar hora local del martes por la tarde, actuación si la aplicación está cerrada y tratamiento de cambios de destinatario o puesto tras una confirmación. |
 | D-06 | Representación y conversión de exportaciones. | El Excel usa «—» para una vacante, «No requerido» para un puesto inaplicable y «Cancelada» para una semana sin reuniones. Queda verificar la conversión local a PDF y PNG frente a ambas hojas de referencia. |

@@ -12,7 +12,13 @@ from nicegui import app, html, run, ui
 from nicegui.events import ValueChangeEventArguments
 from sqlalchemy.exc import SQLAlchemyError
 
-from generador_asignaciones_v2.dominio.programa import Borrador, Semana, grupos_semanales
+from generador_asignaciones_v2.dominio.programa import (
+    Asignaciones,
+    Borrador,
+    Semana,
+    grupos_semanales,
+    resumir_carga,
+)
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 from generador_asignaciones_v2.flujo_mensual import exportar, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
@@ -51,12 +57,17 @@ PUESTOS = {
 
 
 async def _operar[T](accion: Callable[[], T]) -> tuple[bool, T | None]:
+    cliente = ui.context.client
     try:
         return True, await run.io_bound(accion)
     except ValueError as error:
-        ui.notify(str(error), type="warning", timeout=9000)
+        with cliente:
+            ui.notify(str(error), type="warning", timeout=9000)
     except (OSError, sqlite3.Error, SQLAlchemyError):
-        ui.notify("No se pudo completar la operación local. Vuelve a intentarlo.", type="negative")
+        with cliente:
+            ui.notify(
+                "No se pudo completar la operación local. Vuelve a intentarlo.", type="negative"
+            )
     return False, None
 
 
@@ -100,9 +111,7 @@ def _matriz(vista: VistaMes) -> dict:
                                     opciones = {i: nombres[i] for i in candidatos}
                                     if persona is not None and persona not in opciones:
                                         opciones[persona] = f"{nombres[persona]} · revisar"
-                                    control = ui.select(
-                                        opciones, value=persona, clearable=True
-                                    )
+                                    control = ui.select(opciones, value=persona, clearable=True)
                                     controles[plaza] = control
                                     control.mark(f"plaza-{semana.inicio}-{puesto.value}-{numero}")
                                     control.props(
@@ -146,6 +155,8 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
     else:
         estado = "Borrador"
     ui.label(f"{estado} · {len(plazas) - len(pendientes)} de {len(plazas)} plazas cubiertas")
+    if not vista.contexto.personas:
+        ui.label("Agrega o importa el padrón antes de generar.")
     calendario = {}
     with ui.expansion("Calendario y grupos", icon="event").classes("w-full bg-white"):
         with ui.row().classes("gap-4"):
@@ -165,23 +176,71 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
                 calendario[semana.inicio] = (martes, domingo, inactivos)
     controles = _matriz(vista)
 
-    def tomar() -> Borrador:
-        if any(c.value is None or int(c.value) != c.value for c in (cantidad, inicial)):
-            raise ValueError("Escribe números enteros para los grupos.")
-        semanas = tuple(
+    def semanas_editadas() -> tuple[Semana, ...]:
+        return tuple(
             Semana(fecha, martes.value, domingo.value, frozenset(map(Puesto, desactivados.value)))
             for fecha, (martes, domingo, desactivados) in calendario.items()
         )
+
+    def asignaciones_visibles(semanas: tuple[Semana, ...]) -> Asignaciones:
         requeridas = {plaza for semana in semanas for plaza in semana.plazas()}
-        plan = {
+        return {
             plaza: c.value
             for plaza, c in controles.items()
             if c.value is not None and plaza in requeridas
         }
+
+    @ui.refreshable
+    def resumen() -> None:
+        semanas = semanas_editadas()
+        plan = asignaciones_visibles(semanas)
+        if not plan:
+            ui.label("Genera o edita el borrador para ver el reparto.")
+            return
+        cargas = resumir_carga(replace(vista.contexto, semanas=semanas), plan)
+        nombres = _nombres(vista)
+        personas = sorted(
+            cargas, key=lambda i: (-cargas[i].racha_maxima, -cargas[i].asignaciones, nombres[i])
+        )
+        con_racha = sum(c.racha_maxima >= 3 for c in cargas.values())
+        ui.label(f"Personas con tres o más semanas seguidas: {con_racha}")
+        columnas = [
+            {"name": "persona", "label": "Persona", "field": "persona", "align": "left"},
+            {"name": "total", "label": "Asignaciones", "field": "total", "sortable": True},
+            {"name": "semanas", "label": "Semanas del mes", "field": "semanas"},
+            {"name": "racha", "label": "Mayor racha", "field": "racha", "sortable": True},
+        ]
+        filas = [
+            {
+                "id": i,
+                "persona": nombres[i],
+                "total": cargas[i].asignaciones,
+                "semanas": ", ".join(f"{fecha:%d/%m}" for fecha in cargas[i].semanas) or "—",
+                "racha": cargas[i].racha_maxima,
+            }
+            for i in personas
+        ]
+        ui.table(columns=columnas, rows=filas, row_key="id").props("dense").classes("w-full")
+        ui.label("La mayor racha incluye semanas anteriores cuando se conoce el servicio.").classes(
+            "text-sm text-slate-600"
+        )
+
+    with ui.expansion("Carga y descanso", icon="bar_chart").classes("w-full bg-white"):
+        resumen()
+    for control in controles.values():
+        control.on_value_change(lambda: resumen.refresh())
+    for grupo in calendario.values():
+        for control in grupo:
+            control.on_value_change(lambda: resumen.refresh())
+
+    def tomar() -> Borrador:
+        if any(c.value is None or int(c.value) != c.value for c in (cantidad, inicial)):
+            raise ValueError("Escribe números enteros para los grupos.")
+        semanas = semanas_editadas()
         return replace(
             borrador,
             semanas=semanas,
-            plan=plan,
+            plan=asignaciones_visibles(semanas),
             num_grupos=int(cantidad.value),
             grupo_inicial=int(inicial.value),
         )
@@ -204,10 +263,18 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             ui.notify(str(error), type="warning")
             return
         boton_generar.disable()
+        boton_guardar.disable()
+        boton_publicar.disable()
+        resultado = None
         try:
             exito, resultado = await _operar(lambda: generar(programas, vista, cambios))
         finally:
-            boton_generar.enable()
+            if not boton_generar.is_deleted and (resultado is None or resultado.plan is None):
+                boton_generar.enable()
+                boton_guardar.enable()
+                boton_publicar.set_enabled(
+                    vista.revision is not None and not vista.publicado_al_dia
+                )
         if not exito or resultado is None:
             return
         if resultado.plan is None:
@@ -226,7 +293,17 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             mensaje = "Programa factible · optimalidad pendiente"
             if probados:
                 mensaje += f" · Objetivos demostrados: {probados}"
-        ui.notify(mensaje, type="positive")
+        if resultado.aviso_variacion == "única":
+            ui.notify(
+                "El programa se repite porque no hay otro reparto con los mismos resultados.",
+                type="info",
+            )
+        elif resultado.aviso_variacion == "sin_resultado":
+            ui.notify(
+                "La búsqueda terminó sin encontrar otro reparto de igual calidad.", type="info"
+            )
+        else:
+            ui.notify(mensaje, type="positive")
         refrescar()
 
     async def confirmar(aceptar: bool) -> None:
@@ -278,9 +355,10 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
 
     with ui.row().classes("items-center gap-2"):
         boton_generar = ui.button("Generar mes", on_click=generar_mes, icon="auto_awesome")
-        ui.button("Guardar borrador", on_click=guardar).props("outline")
-        boton = ui.button("Publicar", on_click=publicar).props("outline")
-        boton.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
+        boton_generar.set_enabled(bool(vista.contexto.personas))
+        boton_guardar = ui.button("Guardar borrador", on_click=guardar).props("outline")
+        boton_publicar = ui.button("Publicar", on_click=publicar).props("outline")
+        boton_publicar.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
         boton = ui.button("Exportar Excel", on_click=excel, icon="download").props("outline")
         boton.set_enabled(vista.version is not None)
         abrir = ui.button("Abrir archivo", on_click=abrir_excel, icon="open_in_new").props("flat")
