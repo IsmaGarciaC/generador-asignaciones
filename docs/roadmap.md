@@ -8,7 +8,7 @@ Las entregas se organizan por lo que la persona puede hacer en la aplicación. L
 - Fase 2 completada. Se adoptaron Python 3.12 x64 en Windows, NiceGUI con pywebview y OR-Tools CP-SAT. El usuario confirmó el arranque desconectado, el rechazo de acceso desde otro equipo y la apertura externa de WhatsApp. [Resultados de escritorio](../spikes/nicegui_desktop/RESULTADOS.md) · [Resultados del solver](../spikes/assignment_solver/RESULTADOS.md)
 - Fase 3 completada con paquete V2 independiente, catálogo semanal y regla de dobletes. Se comprobó el arranque desde el acceso directo con escucha en `127.0.0.1`. Pytest y Ruff se ejecutan en Windows mediante GitHub Actions. [Guía de la V2](../v2/README.md)
 - Ya se implementaron SQLite, SQLAlchemy, migraciones y respaldos. Los ensayos con datos ficticios conservan identidades y referencias, revierten escrituras interrumpidas y recuperan el programa en otra ubicación privada. [Respaldo y recuperación](../v2/README.md#base-local-y-respaldo)
-- El flujo mensual reúne importación verificable, padrón, calendario, CP-SAT, edición, publicación y Excel. Para distribuir las asignaciones se priorizan la carga del mes y la variedad de puestos, con la equidad histórica como desempate (D-03). [Flujo mensual](../v2/README.md#preparar-un-programa-mensual)
+- El flujo mensual reúne importación verificable, padrón, calendario, CP-SAT, edición, publicación y Excel. Tras la cobertura y los dobletes, se prioriza evitar repetir puesto. La carga mensual y la equidad histórica desempatan en ese orden (D-03). [Flujo mensual](../v2/README.md#preparar-un-programa-mensual)
 
 ## Punto de partida
 

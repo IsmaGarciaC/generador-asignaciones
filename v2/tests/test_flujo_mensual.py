@@ -164,6 +164,28 @@ def test_historial_desempata_sin_concentrar_puestos_con_igual_carga_mensual() ->
     assert len(usos) == len(resultado.plan) == 6
 
 
+def test_motor_prioriza_no_repetir_puesto_aun_si_la_carga_total_es_distinta() -> None:
+    roles = (Puesto.AUDIO, Puesto.VIDEO, Puesto.PLATAFORMA)
+    puestos = frozenset(roles)
+    semanas = tuple(
+        Semana(fecha, desactivados=frozenset(set(Puesto) - puestos))
+        for fecha in martes_del_mes(2026, 12)[:3]
+    )
+    personas = {
+        i: Persona(i, f"Persona {i}", frozenset({puesto}))
+        for i, puesto in enumerate(roles, 1)
+    }
+    personas.update({i: Persona(i, f"Persona {i}", puestos) for i in (4, 5)})
+    contexto = Contexto(semanas, personas)
+    resultado = resolver(contexto)
+    assert resultado.plan is not None
+    assert len(resultado.plan) == 9
+    assert not contexto.validar(resultado.plan)
+    usos = {(puesto, persona) for (_, puesto, _), persona in resultado.plan.items()}
+    assert len(usos) == 9
+    assert sorted(Counter(resultado.plan.values()).values()) == [1, 1, 1, 3, 3]
+
+
 def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):
     copia = tmp_path / "Copia V1"
     crear_copia(copia)

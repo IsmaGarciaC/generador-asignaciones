@@ -186,8 +186,8 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
     objetivos = (
         "cobertura",
         "dobletes",
-        "carga del mes",
         "variedad de puestos",
+        "carga del mes",
         "equidad histórica",
         "descanso y parejas",
     )
