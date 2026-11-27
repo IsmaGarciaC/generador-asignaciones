@@ -24,7 +24,7 @@ Las entregas se organizan por lo que la persona puede hacer en la aplicación. L
 
 ## Entregas y criterios de finalización
 
-La V2 emite Excel, PDF y PNG de la misma publicación. Las pruebas de RF-11 comparan ambas hojas contra V1 con meses de cuatro y cinco semanas. Sigue la ronda semanal publicada con confirmación y registro de envíos según RF-10.
+La V2 emite Excel, PDF y PNG de la misma publicación. Las pruebas de RF-11 comparan ambas hojas contra V1 con meses de cuatro y cinco semanas. La pestaña WhatsApp permite preparar la ronda semanal y registrar sus confirmaciones (RF-10). Queda la comprobación del flujo de WhatsApp en la laptop y la preparación de la distribución de Windows.
 
 | Entrega | Resultado verificable |
 | --- | --- |

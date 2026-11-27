@@ -33,6 +33,14 @@ Instala [LibreOffice con Calc](https://www.libreoffice.org/download/download-lib
 
 En un mes publicado, pulsa **Exportar PDF y PNG** y después **Abrir carpeta**. La carpeta contiene el Excel, un PDF y dos PNG, todos de la misma versión publicada. La primera página es «Programa General», en A4 horizontal. La segunda es «Audio y Video», en A4 vertical con el ancho ajustado para que se vean todas las semanas. La conversión funciona sin conexión.
 
+## Recordatorios de WhatsApp
+
+En **Padrón**, registra los teléfonos con el código de país. Después de publicar el mes, abre **WhatsApp**. La vista selecciona la semana que comenzó el martes más reciente. Puedes elegir otra semana del programa publicado.
+
+Usa **Abrir WhatsApp** para revisar y enviar el mensaje preparado en el navegador. Vuelve a la aplicación y pulsa **Confirmar envío**. La confirmación se conserva aunque cierres la aplicación o vuelvas a publicar el mes. Usa **Reenviar por WhatsApp** si corresponde avisar nuevamente a una persona ya confirmada.
+
+En **Configurar recordatorios**, selecciona los puestos y edita el mensaje con `{nombre}`, `{semana}` y `{puestos}`. La app prepara un mensaje por persona con todos sus puestos incluidos.
+
 ## Base local y respaldo
 
 La base se guarda en `%LOCALAPPDATA%\GeneradorAsignacionesV2\programa.sqlite3`. Alembic crea el esquema en el primer arranque. Cuando una base existente necesita una migración, la aplicación conserva un respaldo verificado de la revisión anterior antes de actualizarla.
