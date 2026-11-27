@@ -8,6 +8,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     ForeignKeyConstraint,
+    Text,
     UniqueConstraint,
     false,
     text,
@@ -122,3 +123,27 @@ class LoteImportado(Base):
 
     huella: Mapped[str] = mapped_column(primary_key=True)
     resumen: Mapped[dict] = mapped_column(JSON)
+
+
+class ConfiguracionRecordatorios(Base):
+    __tablename__ = "configuracion_recordatorios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    puestos: Mapped[list[str]] = mapped_column(JSON)
+    plantilla: Mapped[str] = mapped_column(Text)
+
+
+class EnvioRecordatorio(Base):
+    __tablename__ = "envios_recordatorios"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["programa_id", "version"], ["publicaciones.programa_id", "publicaciones.version"]
+        ),
+    )
+
+    inicio_semana: Mapped[date] = mapped_column(primary_key=True)
+    hermano_id: Mapped[int] = mapped_column(ForeignKey("hermanos.id"), primary_key=True)
+    numero: Mapped[int] = mapped_column(primary_key=True)
+    programa_id: Mapped[int]
+    version: Mapped[int]
+    confirmado_utc: Mapped[str]

@@ -1,6 +1,7 @@
 import asyncio
 import json
 from contextlib import closing
+from dataclasses import replace
 from datetime import date
 from functools import partial
 from pathlib import Path
@@ -10,11 +11,12 @@ from nicegui import ui
 from nicegui.testing import user_simulation
 from pypdfium2 import PdfDocument
 
-from generador_asignaciones_v2 import flujo_mensual
+from generador_asignaciones_v2 import escritorio, flujo_mensual
 from generador_asignaciones_v2.dominio.puestos import Puesto
 from generador_asignaciones_v2.escritorio import mostrar_inicio
 from generador_asignaciones_v2.persistencia.base_datos import BaseDatos
 from generador_asignaciones_v2.persistencia.programas import Programas
+from generador_asignaciones_v2.persistencia.recordatorios import Recordatorios
 
 
 def test_boton_crea_y_confirma_un_respaldo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,3 +133,57 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
     assert len(list(exportaciones.glob("*.xlsx"))) == 1
     (carpeta,) = (ruta for ruta in exportaciones.iterdir() if ruta.is_dir())
     assert sorted(r.suffix for r in carpeta.iterdir()) == [".pdf", ".png", ".png", ".xlsx"]
+
+
+def test_whatsapp_abre_chat_y_pide_confirmacion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FechaPrueba(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 12, 1)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(escritorio, "date", FechaPrueba)
+    enlaces = []
+
+    def abrir(url: str, *, new: int) -> bool:
+        assert new == 2
+        enlaces.append(url)
+        return True
+
+    monkeypatch.setattr(escritorio.webbrowser, "open", abrir)
+    with closing(BaseDatos(tmp_path / "programa.sqlite3")) as base:
+        base.preparar()
+        programas = Programas(base)
+        rol = Puesto.AUDIO
+        puestos = frozenset({rol})
+        persona = programas.guardar_persona(None, "Persona Prueba", "12025550101", puestos, True)
+        otra = programas.guardar_persona(None, "Persona Siguiente", "", puestos, True)
+        vista = programas.leer(2026, 12)
+        primera, segunda, *_ = vista.borrador.semanas
+        plan = {(primera.inicio, rol, 1): persona, (segunda.inicio, rol, 1): otra}
+        programas.guardar(vista, replace(vista.borrador, plan=plan))
+        programas.publicar(programas.leer(2026, 12), acepta_vacantes=True)
+
+        async def probar() -> None:
+            async with user_simulation(root=partial(mostrar_inicio, programas)) as usuario:
+                await usuario.open("/")
+                usuario.find("WhatsApp").click()
+                await usuario.should_see("Persona Prueba")
+                usuario.find("Abrir WhatsApp").click()
+                (confirmar,) = usuario.find("Confirmar envío", kind=ui.button).elements
+                for _ in range(20):
+                    if confirmar.enabled:
+                        break
+                    await asyncio.sleep(0.1)
+                assert len(enlaces) == 1 and enlaces[0].startswith("https://wa.me/12025550101?")
+                assert not Recordatorios(base).leer(primera.inicio).recordatorios[0].confirmaciones
+                usuario.find("Confirmar envío").click()
+                await usuario.should_see("Reenviar por WhatsApp")
+                usuario.find("Semana del recordatorio").click()
+                usuario.find("08/12/2026 – 13/12/2026").click()
+                await usuario.should_see("Persona Siguiente")
+                await usuario.should_see("Falta un teléfono internacional válido en Padrón.")
+
+        asyncio.run(probar())

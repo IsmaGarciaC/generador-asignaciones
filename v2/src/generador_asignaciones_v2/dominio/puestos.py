@@ -16,6 +16,18 @@ class Puesto(StrEnum):
     LECTOR_DOMINGO = "lector_domingo"
 
 
+ETIQUETAS_PUESTOS = {
+    Puesto.AUDIO: "Audio",
+    Puesto.VIDEO: "Video",
+    Puesto.ACOMODADOR: "Acomodadores",
+    Puesto.MICROFONOS: "Micrófonos",
+    Puesto.PLATAFORMA: "Plataforma",
+    Puesto.LECTOR_MARTES: "Lector del martes",
+    Puesto.PRESIDENTE: "Presidente",
+    Puesto.LECTOR_DOMINGO: "Lector de La Atalaya",
+}
+
+
 CUPOS_HABITUALES: Mapping[Puesto, int] = MappingProxyType({
     Puesto.AUDIO: 1,
     Puesto.VIDEO: 1,

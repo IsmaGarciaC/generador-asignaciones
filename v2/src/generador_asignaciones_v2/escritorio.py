@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import webbrowser
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import replace
@@ -21,9 +22,17 @@ from generador_asignaciones_v2.dominio.programa import (
     resumir_carga,
 )
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
+from generador_asignaciones_v2.dominio.puestos import ETIQUETAS_PUESTOS as PUESTOS
+from generador_asignaciones_v2.dominio.recordatorios import (
+    Configuracion,
+    Recordatorio,
+    periodo_semana,
+    semana_actual,
+)
 from generador_asignaciones_v2.flujo_mensual import exportar, exportar_imprimibles, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
 from generador_asignaciones_v2.persistencia.programas import Programas, VistaMes
+from generador_asignaciones_v2.persistencia.recordatorios import Recordatorios
 from generador_asignaciones_v2.regeneracion import Alcance
 
 TITULO = "Generador de Asignaciones"
@@ -46,16 +55,6 @@ MESES = dict(
         1,
     )
 )
-PUESTOS = {
-    Puesto.AUDIO: "Audio",
-    Puesto.VIDEO: "Video",
-    Puesto.ACOMODADOR: "Acomodadores",
-    Puesto.MICROFONOS: "Micrófonos",
-    Puesto.PLATAFORMA: "Plataforma",
-    Puesto.LECTOR_MARTES: "Lector del martes",
-    Puesto.PRESIDENTE: "Presidente",
-    Puesto.LECTOR_DOMINGO: "Lector de La Atalaya",
-}
 
 
 async def _operar[T](accion: Callable[[], T]) -> tuple[bool, T | None]:
@@ -645,10 +644,109 @@ def _importacion(programas: Programas, anio: int, mes: int, actualizar: Callable
     resultados = ui.column().classes("w-full")
 
 
+def _whatsapp(recordatorios: Recordatorios, abiertos: set[Recordatorio]) -> None:
+    actual = semana_actual(date.today())
+    semanas = sorted({actual, *recordatorios.semanas()}, reverse=True)
+    selector = ui.select(
+        {s.isoformat(): periodo_semana(s) for s in semanas},
+        value=actual.isoformat(),
+        label="Semana del recordatorio",
+    ).classes("min-w-72")
+    configuracion = recordatorios.configuracion()
+
+    with ui.expansion("Configurar recordatorios", icon="settings").classes("w-full bg-white"):
+        puestos = ui.select(
+            PUESTOS, value=sorted(configuracion.puestos), label="Puestos incluidos", multiple=True
+        ).classes("w-full")
+        plantilla = ui.textarea("Plantilla del mensaje", value=configuracion.plantilla).classes(
+            "w-full"
+        )
+        ui.label("Campos disponibles · {nombre}, {semana} y {puestos}")
+
+        async def guardar() -> None:
+            cambios = Configuracion(frozenset(map(Puesto, puestos.value)), plantilla.value)
+            if (await _operar(lambda: recordatorios.guardar_configuracion(cambios)))[0]:
+                ui.notify("Configuración de WhatsApp guardada", type="positive")
+                mensajes.refresh()
+
+        ui.button("Guardar configuración", on_click=guardar)
+
+    def ficha(recordatorio: Recordatorio) -> None:
+        reenvio = recordatorio.confirmaciones > 0
+        with ui.card().classes("w-full max-w-3xl"):
+            html.h3(recordatorio.nombre)
+            if reenvio:
+                ui.label(
+                    f"Envíos confirmados: {recordatorio.confirmaciones} · "
+                    f"Última versión enviada: {recordatorio.ultima_version}"
+                )
+                if recordatorio.ultima_version != recordatorio.version:
+                    ui.label("Hay una publicación posterior. Revisa si corresponde reenviar.")
+            ui.label(recordatorio.mensaje).classes("whitespace-pre-wrap break-words")
+            if not recordatorio.telefono:
+                ui.label("Falta un teléfono internacional válido en Padrón.").classes(
+                    "text-amber-900"
+                )
+                return
+
+            def abrir_chat() -> None:
+                enlace = recordatorios.verificar(recordatorio, reenvio=reenvio)
+                if not webbrowser.open(enlace, new=2):
+                    raise ValueError("No se pudo abrir WhatsApp en el navegador.")
+
+            async def abrir() -> None:
+                boton_abrir.disable()
+                exito, _ = await _operar(abrir_chat)
+                if exito:
+                    abiertos.add(recordatorio)
+                if not boton_abrir.is_deleted:
+                    boton_abrir.enable()
+                    if exito:
+                        boton_confirmar.enable()
+
+            async def confirmar() -> None:
+                boton_confirmar.disable()
+                exito, _ = await _operar(
+                    lambda: recordatorios.confirmar(recordatorio, reenvio=reenvio)
+                )
+                if exito:
+                    abiertos.discard(recordatorio)
+                if not boton_confirmar.is_deleted:
+                    mensajes.refresh()
+                    if exito:
+                        ui.notify("Envío confirmado", type="positive")
+
+            with ui.row():
+                boton_abrir = ui.button(
+                    "Reenviar por WhatsApp" if reenvio else "Abrir WhatsApp", on_click=abrir
+                )
+                boton_confirmar = ui.button("Confirmar envío", on_click=confirmar).props("outline")
+                boton_confirmar.set_enabled(recordatorio in abiertos)
+
+    @ui.refreshable
+    def mensajes() -> None:
+        ronda = recordatorios.leer(date.fromisoformat(selector.value))
+        if ronda.version is None:
+            ui.label("Todavía no hay un programa publicado para esta semana.")
+        elif ronda.cancelada:
+            ui.label("Semana cancelada.")
+        elif not ronda.recordatorios:
+            ui.label("Esta semana no tiene asignaciones en los puestos incluidos.")
+        else:
+            ui.label(f"Publicación · versión {ronda.version}")
+            ui.label("Envía el mensaje en WhatsApp y vuelve aquí para confirmar el envío.")
+            for recordatorio in sorted(ronda.recordatorios, key=lambda r: bool(r.confirmaciones)):
+                ficha(recordatorio)
+
+    selector.on_value_change(lambda: mensajes.refresh())
+    mensajes()
+
+
 def mostrar_inicio(programas: Programas) -> None:
     hoy = date.today()
     periodo = hoy.year, hoy.month
     alcances: dict[tuple[int, int], Alcance] = {}
+    chats_abiertos: set[Recordatorio] = set()
 
     @ui.refreshable
     def programa() -> None:
@@ -657,6 +755,10 @@ def mostrar_inicio(programas: Programas) -> None:
     @ui.refreshable
     def padron() -> None:
         _padron(programas, programas.leer(*periodo), programa.refresh)
+
+    @ui.refreshable
+    def whatsapp() -> None:
+        _whatsapp(Recordatorios(programas.base), chats_abiertos)
 
     def actualizar() -> None:
         programa.refresh()
@@ -708,13 +810,19 @@ def mostrar_inicio(programas: Programas) -> None:
             tab_programa = ui.tab("Programa mensual")
             tab_padron = ui.tab("Padrón")
             tab_importar = ui.tab("Importar V1")
-        with ui.tab_panels(tabs, value=tab_programa).classes("w-full bg-transparent"):
+            tab_whatsapp = ui.tab("WhatsApp")
+        with ui.tab_panels(tabs, value=tab_programa).classes("w-full bg-transparent") as paneles:
             with ui.tab_panel(tab_programa).classes("px-0"):
                 programa()
             with ui.tab_panel(tab_padron).classes("px-0"):
                 padron()
             with ui.tab_panel(tab_importar).classes("px-0"):
                 importar()
+            with ui.tab_panel(tab_whatsapp).classes("px-0"):
+                whatsapp()
+        paneles.on_value_change(
+            lambda e: whatsapp.refresh() if e.value == tab_whatsapp.name else None
+        )
 
 
 def iniciar(programas: Programas) -> None:
