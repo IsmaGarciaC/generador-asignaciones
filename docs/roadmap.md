@@ -2,6 +2,12 @@
 
 Las fases siguen el orden de entrega propuesto. La columna de dependencias indica qué resultados hacen falta para empezar cada fase. Los identificadores RF, RNF y D remiten a los [requisitos, criterios de aceptación y decisiones abiertas](requirements.md). La [guía de desarrollo](../AGENTS.md) recoge los límites arquitectónicos.
 
+## Estado actual
+
+- Fase 1 completada con la guía, los requisitos y la referencia V1.
+- Fase 2 con CP-SAT validado en Windows con Python 3.12 x64. Se recomienda adoptarlo para el motor. La fórmula de equidad del prototipo queda sujeta a D-03 antes de la fase 8. [Resultados del solver](../spikes/assignment_solver/RESULTADOS.md)
+- Para cerrar la fase 2 y documentar la decisión del stack (D-08), quedan por verificar el arranque desconectado, el acceso desde otro equipo y la apertura de WhatsApp en el navegador externo. Después sigue la fase 3 con la estructura mínima, el arranque local y CI. El respaldo y la restauración se prueban en la fase 4. [Resultados de escritorio](../spikes/nicegui_desktop/RESULTADOS.md)
+
 ## Punto de partida
 
 | Evidencia de la versión anterior | Consecuencia para la V2 |
