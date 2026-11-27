@@ -1,4 +1,5 @@
 import json
+import os
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import closing
@@ -9,9 +10,12 @@ from zipfile import ZipFile
 
 import pytest
 from openpyxl import load_workbook
+from PIL import Image
+from pypdfium2 import PdfDocument
 from sqlalchemy.exc import IntegrityError
 
 from exportador_excel import exportar_programa_excel
+from generador_asignaciones_v2 import flujo_mensual
 from generador_asignaciones_v2.dominio.programa import (
     CargaPersona,
     Contexto,
@@ -22,8 +26,13 @@ from generador_asignaciones_v2.dominio.programa import (
     resumir_carga,
 )
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
-from generador_asignaciones_v2.flujo_mensual import exportar, generar
+from generador_asignaciones_v2.flujo_mensual import exportar, exportar_imprimibles, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
+from generador_asignaciones_v2.impresion import (
+    convertir_a_pdf,
+    localizar_libreoffice,
+    renderizar_paginas,
+)
 from generador_asignaciones_v2.optimizador import resolver
 from generador_asignaciones_v2.persistencia.base_datos import BaseDatos
 from generador_asignaciones_v2.persistencia.programas import Programas
@@ -327,18 +336,18 @@ def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, 
         assert enero.contexto.historial[nuevo, semanas[1].inicio] == 1
 
 
-@pytest.mark.parametrize("mes", [11, 12])
-def test_excel_ordinario_conserva_xml_de_las_dos_hojas(
-    mes: int,
+@pytest.fixture(params=[11, 12], ids=["cuatro-semanas", "cinco-semanas"])
+def mes_ordinario(
+    request: pytest.FixtureRequest,
     programas: Programas,
     tmp_path: Path,
-) -> None:
+) -> tuple[int, Path]:
+    mes = request.param
     mes_v1 = {}
-    vista = programas.leer(2026, mes)
     padron = {}
     for puesto, cupos in CUPOS_HABITUALES.items():
         for cupo in range(1, cupos + 1):
-            nombre = f"Persona {puesto.value} {cupo}"
+            nombre = f"Persona {len(padron) + 1:02d}"
             ident = programas.guardar_persona(None, nombre, "", frozenset({puesto}), True)
             padron[puesto, cupo] = ident, nombre
     vista = programas.leer(2026, mes)
@@ -353,9 +362,116 @@ def test_excel_ordinario_conserva_xml_de_las_dos_hojas(
     programas.publicar(programas.leer(2026, mes))
     referencia = tmp_path / "V1.xlsx"
     exportar_programa_excel(mes_v1, 2026, mes, 4, str(referencia))
+    return mes, referencia
+
+
+def test_excel_ordinario_conserva_xml_de_las_dos_hojas(
+    programas: Programas,
+    mes_ordinario: tuple[int, Path],
+) -> None:
+    mes, referencia = mes_ordinario
     with ZipFile(referencia) as v1, ZipFile(exportar(programas, 2026, mes)) as v2:
         for xml in ("workbook.xml", "styles.xml", "worksheets/sheet1.xml", "worksheets/sheet2.xml"):
             assert v1.read(f"xl/{xml}") == v2.read(f"xl/{xml}")
+
+
+@pytest.fixture
+def requiere_libreoffice() -> None:
+    try:
+        localizar_libreoffice()
+    except ValueError as error:
+        if os.environ.get("ASIGNACIONES_LIBREOFFICE"):
+            raise
+        pytest.skip(str(error))
+
+
+@pytest.mark.usefixtures("requiere_libreoffice")
+def test_pdf_y_png_reproducen_las_dos_hojas_de_referencia(
+    programas: Programas,
+    mes_ordinario: tuple[int, Path],
+) -> None:
+    mes, referencia = mes_ordinario
+    carpeta = exportar_imprimibles(programas, 2026, mes)
+    (excel,) = carpeta.glob("*.xlsx")
+    (pdf,) = carpeta.glob("*.pdf")
+    with ZipFile(referencia) as v1, ZipFile(excel) as v2:
+        for archivo in ("xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml", "xl/styles.xml"):
+            assert v1.read(archivo) == v2.read(archivo)
+    imagenes_v1 = renderizar_paginas(convertir_a_pdf(referencia))
+    for imagen_v1, imagen_v2 in zip(imagenes_v1, sorted(carpeta.glob("*.png")), strict=True):
+        with Image.open(imagen_v1) as original, Image.open(imagen_v2) as nueva:
+            assert nueva.size == original.size
+            assert nueva.tobytes() == original.tobytes()
+    with closing(PdfDocument(pdf)) as documento:
+        tamanos = [(841.89, 595.28), (595.28, 841.89)]
+        for pagina, dimensiones in zip(documento, tamanos, strict=True):
+            with closing(pagina):
+                assert pagina.get_size() == pytest.approx(dimensiones, abs=0.1)
+        with closing(documento[1]) as pagina, closing(pagina.get_textpage()) as texto:
+            contenido = texto.get_text_range()
+            assert "PROGRAMA DE ASIGNACIONES AUDIO Y VIDEO" in contenido
+            assert "Persona 01" in contenido
+            assert ("29 Dic - 03 Ene" if mes == 12 else "24-29 Nov") in contenido
+
+
+@pytest.mark.usefixtures("requiere_libreoffice")
+def test_exportaciones_reflejan_la_publicacion_con_excepciones(programas: Programas) -> None:
+    persona = programas.guardar_persona(
+        None, "Persona publicada", "", frozenset({Puesto.VIDEO}), True
+    )
+    vista = programas.leer(2026, 12)
+    semanas = list(vista.borrador.semanas)
+    semanas[1] = replace(semanas[1], martes=False, domingo=False)
+    semanas[2] = replace(semanas[2], desactivados=frozenset({Puesto.VIDEO}))
+    plaza = semanas[0].inicio, Puesto.VIDEO, 1
+    programas.guardar(vista, replace(vista.borrador, semanas=tuple(semanas), plan={plaza: persona}))
+    assert programas.publicar(programas.leer(2026, 12), acepta_vacantes=True) == 1
+    programas.guardar_persona(persona, "Nombre nuevo", "", frozenset({Puesto.VIDEO}), True)
+    vista = programas.leer(2026, 12)
+    programas.guardar(vista, replace(vista.borrador, plan={}))
+
+    carpeta = exportar_imprimibles(programas, 2026, 12)
+    assert carpeta.name.startswith("Programa-2026-12-v1-")
+    (excel,) = carpeta.glob("*.xlsx")
+    (pdf,) = carpeta.glob("*.pdf")
+    with closing(load_workbook(excel)) as libro:
+        hoja = libro["Audio y Video"]
+        assert [hoja[celda].value for celda in ("B4", "C4", "D4", "E4")] == [
+            "Persona publicada",
+            "Cancelada",
+            "No requerido",
+            "—",
+        ]
+    with closing(PdfDocument(pdf)) as documento:
+        with closing(documento[1]) as pagina, closing(pagina.get_textpage()) as texto:
+            contenido = texto.get_text_range()
+            for valor in ("Persona publicada", "Cancelada", "No requerido", "—"):
+                assert valor in contenido
+            assert "Nombre nuevo" not in contenido
+    assert len(list(carpeta.glob("*.png"))) == 2
+
+
+def test_fallo_de_impresion_no_deja_exportaciones_incompletas(
+    programas: Programas,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vista = programas.leer(2026, 12)
+    programas.guardar(vista, vista.borrador)
+    programas.publicar(programas.leer(2026, 12), acepta_vacantes=True)
+    excel_existente = exportar(programas, 2026, 12)
+
+    def fallo(excel: Path) -> Path:
+        assert excel.is_file()
+        pdf = excel.with_suffix(".pdf")
+        with closing(PdfDocument.new()) as documento:
+            documento.new_page(595, 842).close()
+            documento.save(pdf)
+        return pdf
+
+    monkeypatch.setattr(flujo_mensual, "convertir_a_pdf", fallo)
+    with pytest.raises(ValueError, match="una página por cada hoja"):
+        exportar_imprimibles(programas, 2026, 12)
+    assert list(excel_existente.parent.iterdir()) == [excel_existente]
 
 
 def test_importacion_ambigua_y_reintento_tras_error(programas: Programas, tmp_path: Path):

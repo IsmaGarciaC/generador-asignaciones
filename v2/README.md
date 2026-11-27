@@ -27,6 +27,12 @@ Para diagnosticar un fallo de inicio desde la raíz, ejecuta `.\v2\venv\Scripts\
 
 Para conservar una asignación al regenerar, pulsa su candado. **Guardar borrador** conserva los bloqueos. En **Alcance** puedes elegir todo el mes, una semana o un puesto durante todo el mes. Las asignaciones bloqueadas y las plazas fuera del alcance, incluidas las vacantes, se conservan. Si una ausencia u otro cambio invalida un bloqueo, la ventana indica la fecha, el puesto y el motivo.
 
+## Exportar PDF y PNG
+
+Instala [LibreOffice con Calc](https://www.libreoffice.org/download/download-libreoffice/) en Windows para habilitar la conversión local. Si ya tenías instalada la V2, actualiza sus dependencias desde la raíz con `.\v2\venv\Scripts\python.exe -m pip install -e .\v2`. Luego vuelve a abrir la aplicación.
+
+En un mes publicado, pulsa **Exportar PDF y PNG** y después **Abrir carpeta**. La carpeta contiene el Excel, un PDF y dos PNG, todos de la misma versión publicada. La primera página es «Programa General», en A4 horizontal. La segunda es «Audio y Video», en A4 vertical con el ancho ajustado para que se vean todas las semanas. La conversión funciona sin conexión.
+
 ## Base local y respaldo
 
 La base se guarda en `%LOCALAPPDATA%\GeneradorAsignacionesV2\programa.sqlite3`. Alembic crea el esquema en el primer arranque. Cuando una base existente necesita una migración, la aplicación conserva un respaldo verificado de la revisión anterior antes de actualizarla.
@@ -50,3 +56,5 @@ La aplicación comprueba la integridad de SQLite y sus claves foráneas antes de
 ```
 
 GitHub Actions ejecuta las dos suites y Ruff en Windows para los cambios hacia `v2`. Las pruebas del dominio V2 usan el catálogo y combinaciones en memoria. Consulta el [roadmap](../docs/roadmap.md) para el estado de las fases.
+
+Las pruebas visuales de exportación se ejecutan cuando LibreOffice está instalado. Para usar una instalación por fuera de la ruta habitual, indica la ruta completa a `soffice.com` en la variable `ASIGNACIONES_LIBREOFFICE`.
