@@ -204,10 +204,18 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
             ui.notify(str(error), type="warning")
             return
         boton_generar.disable()
+        boton_guardar.disable()
+        boton_publicar.disable()
+        resultado = None
         try:
             exito, resultado = await _operar(lambda: generar(programas, vista, cambios))
         finally:
-            boton_generar.enable()
+            if resultado is None or resultado.plan is None:
+                boton_generar.enable()
+                boton_guardar.enable()
+                boton_publicar.set_enabled(
+                    vista.revision is not None and not vista.publicado_al_dia
+                )
         if not exito or resultado is None:
             return
         if resultado.plan is None:
@@ -278,9 +286,9 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
 
     with ui.row().classes("items-center gap-2"):
         boton_generar = ui.button("Generar mes", on_click=generar_mes, icon="auto_awesome")
-        ui.button("Guardar borrador", on_click=guardar).props("outline")
-        boton = ui.button("Publicar", on_click=publicar).props("outline")
-        boton.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
+        boton_guardar = ui.button("Guardar borrador", on_click=guardar).props("outline")
+        boton_publicar = ui.button("Publicar", on_click=publicar).props("outline")
+        boton_publicar.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
         boton = ui.button("Exportar Excel", on_click=excel, icon="download").props("outline")
         boton.set_enabled(vista.version is not None)
         abrir = ui.button("Abrir archivo", on_click=abrir_excel, icon="open_in_new").props("flat")

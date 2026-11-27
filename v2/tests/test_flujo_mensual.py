@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
@@ -118,6 +119,49 @@ def test_motor_alterna_el_mismo_puesto_desde_la_ultima_semana_del_mes_anterior()
     assert resultado.estado == "OPTIMAL"
     assert resultado.plan is not None
     assert [resultado.plan[fecha, Puesto.AUDIO, 1] for fecha in fechas] == [2, 1, 2, 1]
+
+
+@pytest.mark.parametrize("personas, frecuencias", [(5, [2] * 5), (10, [1] * 10)])
+def test_motor_reparte_las_diez_plazas_del_mismo_puesto_en_todo_el_mes(
+    personas: int,
+    frecuencias: list[int],
+) -> None:
+    puestos = frozenset({Puesto.MICROFONOS, Puesto.ACOMODADOR})
+    contexto = Contexto(
+        tuple(
+            Semana(fecha, desactivados=frozenset(set(Puesto) - puestos))
+            for fecha in martes_del_mes(2026, 12)
+        ),
+        {i: Persona(i, f"Persona {i}", puestos) for i in range(1, personas + 1)},
+    )
+    resultado = resolver(contexto)
+    assert resultado.plan is not None
+    assert len(resultado.plan) == 20
+    assert not contexto.validar(resultado.plan)
+    for puesto in puestos:
+        conteos = Counter(i for (_, rol, _), i in resultado.plan.items() if rol == puesto)
+        assert sorted(conteos.values()) == frecuencias
+
+
+def test_historial_desempata_sin_concentrar_puestos_con_igual_carga_mensual() -> None:
+    puestos = frozenset({Puesto.AUDIO, Puesto.VIDEO})
+    fechas = martes_del_mes(2026, 12)[:3]
+    contexto = Contexto(
+        tuple(Semana(f, desactivados=frozenset(set(Puesto) - puestos)) for f in fechas),
+        {
+            1: Persona(1, "Persona 1", frozenset({Puesto.AUDIO})),
+            2: Persona(2, "Persona 2", frozenset({Puesto.VIDEO})),
+            3: Persona(3, "Persona 3", puestos),
+            4: Persona(4, "Persona 4", puestos),
+        },
+        historial={(3, date(2026, 11, 24)): 2, (4, date(2026, 11, 24)): 2},
+    )
+    resultado = resolver(contexto)
+    assert resultado.estado == "OPTIMAL"
+    assert resultado.plan is not None
+    assert sorted(Counter(resultado.plan.values()).values()) == [1, 1, 2, 2]
+    usos = {(puesto, persona) for (_, puesto, _), persona in resultado.plan.items()}
+    assert len(usos) == len(resultado.plan) == 6
 
 
 def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):

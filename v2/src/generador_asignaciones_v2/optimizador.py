@@ -3,7 +3,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
-from itertools import combinations
+from itertools import combinations, pairwise
 
 from ortools.sat.python import cp_model as cp
 
@@ -68,15 +68,16 @@ class Modelo:
                 self.trabaja[persona.id, inicio] = trabaja
                 self.dobles.append(doble)
 
-    def equidad(self) -> cp.LinearExpr | int:
+    def equidad(self, *, incluir_historial: bool) -> cp.LinearExpr | int:
         costes = []
         semanas = self.contexto.semanas
+        historial = self.contexto.historial if incluir_historial else {}
         for persona in self.contexto.personas.values():
             if not persona.activa:
                 continue
             pasado = [
                 cantidad
-                for (persona_id, _), cantidad in self.contexto.historial.items()
+                for (persona_id, _), cantidad in historial.items()
                 if persona_id == persona.id
             ]
             oportunidades = len(pasado) + sum(
@@ -90,6 +91,8 @@ class Modelo:
                 (sum(pasado), self.servicios[persona.id], 2 * len(semanas)),
                 (sum(n > 0 for n in pasado), trabajadas, len(semanas)),
             ):
+                if not variables:
+                    continue
                 incremento = self.cp.new_int_var(0, limite, "incremento")
                 self.cp.add(incremento == sum(variables))
                 tabla = [
@@ -97,7 +100,10 @@ class Modelo:
                     for i in range(limite + 1)
                 ]
                 coste = self.cp.new_int_var(tabla[0], tabla[-1], "coste")
-                self.cp.add_element(incremento, tabla, coste)
+                # Las pendientes crecen. Esta formulación evita una restricción de
+                # selección para cada valor de carga al continuar con la rotación.
+                for i, (inferior, superior) in enumerate(pairwise(tabla)):
+                    self.cp.add(coste >= inferior + (superior - inferior) * (incremento - i))
                 costes.append(coste)
         return sum(costes)
 
@@ -105,6 +111,27 @@ class Modelo:
         extra = self.cp.new_int_var(0, len(variables) - 1, "repeticiones")
         self.cp.add_max_equality(extra, [0, sum(variables) - 1])
         return extra
+
+    def variedad_puestos(self) -> cp.LinearExpr | int:
+        """Cada reasignación al mismo puesto cuesta más que la anterior."""
+        costes = []
+        for persona in self.contexto.personas.values():
+            for puesto in sorted(persona.puestos):
+                semanas = [
+                    variables
+                    for semana in self.contexto.semanas
+                    if (variables := self.por_rol[persona.id, semana.inicio, puesto])
+                ]
+                limite = len(semanas)
+                if limite <= 1:
+                    continue
+                usos = sum(v for variables in semanas for v in variables)
+                coste = self.cp.new_int_var(0, limite * (limite - 1) // 2, "concentracion_puesto")
+                for uso in range(1, limite):
+                    # Envolvente lineal de n * (n - 1) / 2 para conteos enteros.
+                    self.cp.add(coste >= uso * usos - uso * (uso + 1) // 2)
+                costes.append(coste)
+        return sum(costes)
 
     def rotacion(self) -> cp.LinearExpr | int:
         semanas = self.contexto.semanas
@@ -128,14 +155,12 @@ class Modelo:
                 self.cp.add_min_equality(seguida, servicio[i + 1 : i + 3])
                 penas.append(seguida)
             for puesto in sorted(persona.puestos):
-                veces = []
                 anterior = int(
                     (persona.id, semanas[0].inicio - timedelta(weeks=1), puesto)
                     in self.contexto.puestos_historicos
                 )
                 for semana in semanas:
                     variables = self.por_rol[persona.id, semana.inicio, puesto]
-                    veces.extend(variables)
                     presente = sum(variables)
                     if variables:
                         consecutiva = self.cp.new_bool_var("puesto_consecutivo")
@@ -144,8 +169,6 @@ class Modelo:
                     anterior = presente
                     if variables and puesto in (Puesto.MICROFONOS, Puesto.ACOMODADOR):
                         equipos[semana.inicio, puesto].append((persona.id, presente))
-                if len(veces) > 1:
-                    penas.append(self.repeticiones(veces))
         encuentros = defaultdict(list)
         for (_, puesto), personas in equipos.items():
             for (a, uno), (b, otro) in combinations(personas, 2):
@@ -160,23 +183,35 @@ def resolver(contexto: Contexto, segundos: float = 5.0) -> Resultado:
     modelo = Modelo(contexto)
     plan = None
     probados = []
-    for nombre in ("cobertura", "dobletes", "equidad", "rotación"):
+    objetivos = (
+        "cobertura",
+        "dobletes",
+        "carga del mes",
+        "variedad de puestos",
+        "equidad histórica",
+        "descanso y parejas",
+    )
+    for nombre in objetivos:
         if nombre == "cobertura":
             objetivo = sum(modelo.asigna.values())
             modelo.cp.maximize(objetivo)
         else:
             if nombre == "dobletes":
                 objetivo = sum(modelo.dobles)
-            elif nombre == "equidad":
-                objetivo = modelo.equidad()
+            elif nombre in ("carga del mes", "equidad histórica"):
+                objetivo = modelo.equidad(incluir_historial=nombre == "equidad histórica")
+            elif nombre == "variedad de puestos":
+                objetivo = modelo.variedad_puestos()
             else:
                 objetivo = modelo.rotacion()
             modelo.cp.minimize(objetivo)
         solver = cp.CpSolver()
-        # La rotación tiene más combinaciones y se ejecuta sobre los objetivos ya fijados.
-        es_rotacion = nombre == "rotación"
-        solver.parameters.max_time_in_seconds = segundos * (2 if es_rotacion else 1)
-        solver.parameters.num_search_workers = 4 if es_rotacion else 1
+        # La variedad se resuelve antes de agregar las variables de las parejas.
+        preferencias = nombre not in ("cobertura", "dobletes")
+        solver.parameters.max_time_in_seconds = segundos * (
+            2 if nombre in ("variedad de puestos", "descanso y parejas") else 1
+        )
+        solver.parameters.num_search_workers = 4 if preferencias else 1
         solver.parameters.random_seed = 73
         estado = solver.solve(modelo.cp)
         if estado == cp.UNKNOWN and plan is not None:

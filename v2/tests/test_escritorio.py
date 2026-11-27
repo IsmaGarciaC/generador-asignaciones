@@ -60,6 +60,8 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 await usuario.should_see("Programa generado", retries=30)
                 hoy = date.today()
                 generado = programas.leer(hoy.year, hoy.month)
+                semanas = len(generado.borrador.semanas)
+                await usuario.should_see(f"{semanas} de {semanas * 10} plazas cubiertas")
                 fecha = generado.borrador.semanas[0].inicio
                 plaza = fecha, Puesto.AUDIO, 1
                 otra = {1, 2}.difference({generado.borrador.plan[plaza]}).pop()
