@@ -23,9 +23,11 @@ Las entregas se organizan por lo que la persona puede hacer en la aplicación. L
 
 ## Entregas y criterios de finalización
 
+La V2 emite Excel, PDF y PNG de la misma publicación. Las pruebas de RF-11 comparan ambas hojas contra V1 con meses de cuatro y cinco semanas. Sigue la ronda semanal publicada con confirmación y registro de envíos según RF-10.
+
 | Entrega | Resultado verificable |
 | --- | --- |
 | Preparar y emitir el mes en Excel | Cargar el padrón y el historial reciente verificable desde un respaldo, configurar reuniones y ausencias, generar meses de cuatro y cinco semanas, editar, publicar, reabrir y exportar. Verificar el cruce de año, la reversión de cambios inválidos, las vacantes, la estabilidad de los grupos y la equivalencia de ambas hojas con V1. |
 | Completar importación y edición | Conciliar fuentes históricas JSON y Excel según RF-12 y D-07. Resolver D-04 con cambios de rotación que preserven programas confirmados. |
-| Completar salidas y recordatorios | La V2 emite Excel, PDF y PNG de la misma publicación. Las pruebas de RF-11 comparan ambas hojas contra V1 con meses de cuatro y cinco semanas. Sigue la ronda semanal publicada con confirmación y registro de envíos según RF-10. |
+| Completar salidas y recordatorios | Emitir PDF y PNG desde la misma publicación y verificar la impresión de ambas hojas según RF-11. Abrir la ronda semanal publicada, confirmar envíos y preservar su registro según RF-10. |
 | Distribuir V2.0.0 | Ensayar en la laptop el flujo completo sin Internet, restaurar un respaldo y revisar el paquete de Windows para excluir datos reales. Cerrar los criterios RF y RNF que faltan. |
