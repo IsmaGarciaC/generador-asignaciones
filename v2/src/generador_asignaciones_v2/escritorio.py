@@ -51,12 +51,17 @@ PUESTOS = {
 
 
 async def _operar[T](accion: Callable[[], T]) -> tuple[bool, T | None]:
+    cliente = ui.context.client
     try:
         return True, await run.io_bound(accion)
     except ValueError as error:
-        ui.notify(str(error), type="warning", timeout=9000)
+        with cliente:
+            ui.notify(str(error), type="warning", timeout=9000)
     except (OSError, sqlite3.Error, SQLAlchemyError):
-        ui.notify("No se pudo completar la operación local. Vuelve a intentarlo.", type="negative")
+        with cliente:
+            ui.notify(
+                "No se pudo completar la operación local. Vuelve a intentarlo.", type="negative"
+            )
     return False, None
 
 
@@ -146,6 +151,8 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
     else:
         estado = "Borrador"
     ui.label(f"{estado} · {len(plazas) - len(pendientes)} de {len(plazas)} plazas cubiertas")
+    if not vista.contexto.personas:
+        ui.label("Agrega o importa el padrón antes de generar.")
     calendario = {}
     with ui.expansion("Calendario y grupos", icon="event").classes("w-full bg-white"):
         with ui.row().classes("gap-4"):
@@ -210,7 +217,7 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
         try:
             exito, resultado = await _operar(lambda: generar(programas, vista, cambios))
         finally:
-            if resultado is None or resultado.plan is None:
+            if not boton_generar.is_deleted and (resultado is None or resultado.plan is None):
                 boton_generar.enable()
                 boton_guardar.enable()
                 boton_publicar.set_enabled(
@@ -286,6 +293,7 @@ def _programa(programas: Programas, vista: VistaMes, refrescar: Callable[[], Non
 
     with ui.row().classes("items-center gap-2"):
         boton_generar = ui.button("Generar mes", on_click=generar_mes, icon="auto_awesome")
+        boton_generar.set_enabled(bool(vista.contexto.personas))
         boton_guardar = ui.button("Guardar borrador", on_click=guardar).props("outline")
         boton_publicar = ui.button("Publicar", on_click=publicar).props("outline")
         boton_publicar.set_enabled(vista.revision is not None and not vista.publicado_al_dia)

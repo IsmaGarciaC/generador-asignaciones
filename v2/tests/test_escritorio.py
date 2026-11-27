@@ -56,6 +56,7 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 usuario.find("Aplicar importación").click()
                 await usuario.should_see("Importadas 2 personas", retries=20)
                 usuario.find("Programa mensual").click()
+                await usuario.should_not_see("Agrega o importa el padrón antes de generar.")
                 usuario.find("Generar mes").click()
                 await usuario.should_see("Programa generado", retries=30)
                 hoy = date.today()
