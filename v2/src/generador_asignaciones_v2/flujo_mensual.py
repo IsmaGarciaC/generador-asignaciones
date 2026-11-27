@@ -1,11 +1,14 @@
 """Coordina la generación de un borrador y la exportación de una publicación."""
 
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 from generador_asignaciones_v2.dominio.programa import Borrador
 from generador_asignaciones_v2.dominio.puestos import Puesto
+from generador_asignaciones_v2.impresion import convertir_a_pdf, renderizar_paginas
 from generador_asignaciones_v2.optimizador import Resultado
 from generador_asignaciones_v2.persistencia.programas import Programas, VistaMes
 from generador_asignaciones_v2.plantilla_excel import crear_libro
@@ -59,11 +62,29 @@ def exportar(programas: Programas, anio: int, mes: int) -> Path:
     carpeta.mkdir(parents=True, exist_ok=True)
     ruta = carpeta / f"Programa-{anio}-{mes:02d}-v{version}-{uuid4().hex[:10]}.xlsx"
     temporal = ruta.with_suffix(".tmp")
-    libro = crear_libro(anio, mes, celdas_publicadas(contenido))
     try:
-        libro.save(temporal)
+        with closing(crear_libro(anio, mes, celdas_publicadas(contenido))) as libro:
+            libro.save(temporal)
         temporal.rename(ruta)
     finally:
-        libro.close()
         temporal.unlink(missing_ok=True)
     return ruta
+
+
+def exportar_imprimibles(programas: Programas, anio: int, mes: int) -> Path:
+    """Publica el Excel, el PDF y sus páginas PNG de una sola versión, juntos."""
+    version, contenido = programas.leer_publicacion(anio, mes)
+    carpeta = programas.base.ruta.parent / "exportaciones"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    nombre = f"Programa-{anio}-{mes:02d}-v{version}-{uuid4().hex[:10]}"
+    destino = carpeta / nombre
+    with TemporaryDirectory(prefix=".impresion-", dir=carpeta) as temporal:
+        preparado = Path(temporal) / nombre
+        preparado.mkdir()
+        excel = preparado / f"{nombre}.xlsx"
+        with closing(crear_libro(anio, mes, celdas_publicadas(contenido))) as libro:
+            libro.save(excel)
+        pdf = convertir_a_pdf(excel)
+        renderizar_paginas(pdf)
+        preparado.rename(destino)
+    return destino

@@ -127,3 +127,7 @@ Desde una copia privada de V1, revisar e importar el padrón, las ausencias del 
 | D-06 | Representación y conversión de exportaciones. | El Excel usa «—» para una vacante, «No requerido» para un puesto inaplicable y «Cancelada» para una semana sin reuniones. Queda verificar la conversión local a PDF y PNG frente a ambas hojas de referencia. |
 | D-07 | Alcance de la recuperación heredada. | El usuario confirmó que el programa solo tiene dos meses de historial. La importación de RF-12 cubre el alcance acordado. Se retira la fase de recuperación adicional y conciliación de JSON con Excel. |
 | D-08 | Viabilidad técnica, distribución y respaldo. | Validar versiones compatibles, inicio local y capacidad de CP-SAT en Windows. Definir ubicación privada, frecuencia y retención de copias y demostrar la restauración. |
+
+### Validación de D-06
+
+Las pruebas de RF-11 verificaron las dos hojas de referencia con meses de cuatro y cinco semanas. Los tres formatos distinguen vacantes, puestos no requeridos y semanas canceladas. LibreOffice Calc convierte una copia local del libro a PDF y PDFium genera un PNG por página. La copia ajusta «Audio y Video» al ancho de una página A4 vertical para que el encabezado quede completo. El Excel exportado conserva su configuración original.

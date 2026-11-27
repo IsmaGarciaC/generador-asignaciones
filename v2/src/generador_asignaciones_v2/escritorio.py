@@ -21,7 +21,7 @@ from generador_asignaciones_v2.dominio.programa import (
     resumir_carga,
 )
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
-from generador_asignaciones_v2.flujo_mensual import exportar, generar
+from generador_asignaciones_v2.flujo_mensual import exportar, exportar_imprimibles, generar
 from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
 from generador_asignaciones_v2.persistencia.programas import Programas, VistaMes
 from generador_asignaciones_v2.regeneracion import Alcance
@@ -430,19 +430,31 @@ def _programa(
                 ui.button("Confirmar publicación", on_click=aceptar)
         dialogo.open()
 
-    ultimo_excel: Path | None = None
+    ultima_exportacion: Path | None = None
 
-    async def excel() -> None:
-        nonlocal ultimo_excel
-        exito, archivo = await _operar(lambda: exportar(programas, borrador.anio, borrador.mes))
-        if exito and archivo is not None:
-            ultimo_excel = archivo
-            destino.set_text(f"Excel guardado en {archivo}")
+    async def emitir(imprimibles: bool) -> None:
+        nonlocal ultima_exportacion
+        boton_excel.disable()
+        boton_imprimibles.disable()
+        try:
+            guardar_archivos = exportar_imprimibles if imprimibles else exportar
+            exito, ruta = await _operar(
+                lambda: guardar_archivos(programas, borrador.anio, borrador.mes)
+            )
+        finally:
+            if not boton_excel.is_deleted:
+                boton_excel.enable()
+                boton_imprimibles.enable()
+        if exito and ruta is not None and not abrir.is_deleted:
+            ultima_exportacion = ruta
+            formato = "Excel, PDF y PNG guardados" if imprimibles else "Excel guardado"
+            destino.set_text(f"{formato} en {ruta}")
+            abrir.set_text("Abrir carpeta" if imprimibles else "Abrir archivo")
             abrir.set_visibility(os.name == "nt")
 
-    async def abrir_excel() -> None:
-        if ultimo_excel is not None:
-            archivo = ultimo_excel
+    async def abrir_exportacion() -> None:
+        if ultima_exportacion is not None:
+            archivo = ultima_exportacion
             await _operar(lambda: os.startfile(archivo))
 
     with ui.row().classes("items-center gap-2"):
@@ -490,9 +502,17 @@ def _programa(
         boton_guardar = ui.button("Guardar borrador", on_click=guardar).props("outline")
         boton_publicar = ui.button("Publicar", on_click=publicar).props("outline")
         boton_publicar.set_enabled(vista.revision is not None and not vista.publicado_al_dia)
-        boton = ui.button("Exportar Excel", on_click=excel, icon="download").props("outline")
-        boton.set_enabled(vista.version is not None)
-        abrir = ui.button("Abrir archivo", on_click=abrir_excel, icon="open_in_new").props("flat")
+        boton_excel = ui.button(
+            "Exportar Excel", on_click=lambda: emitir(False), icon="download"
+        ).props("outline")
+        boton_imprimibles = ui.button(
+            "Exportar PDF y PNG", on_click=lambda: emitir(True), icon="picture_as_pdf"
+        ).props("outline")
+        boton_excel.set_enabled(vista.version is not None)
+        boton_imprimibles.set_enabled(vista.version is not None)
+        abrir = ui.button(
+            "Abrir archivo", on_click=abrir_exportacion, icon="open_in_new"
+        ).props("flat")
         abrir.set_visibility(False)
     destino = ui.label().classes("break-all")
 

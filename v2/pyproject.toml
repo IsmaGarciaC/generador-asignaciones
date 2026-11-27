@@ -10,6 +10,8 @@ dependencies = [
     "alembic==1.20.1",
     "ortools==9.15.6755",
     "openpyxl==3.1.5",
+    "pypdfium2==5.15.2",
+    "Pillow>=12,<13",
 ]
 
 [project.optional-dependencies]

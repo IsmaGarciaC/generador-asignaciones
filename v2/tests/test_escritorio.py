@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 from nicegui import ui
 from nicegui.testing import user_simulation
+from pypdfium2 import PdfDocument
 
+from generador_asignaciones_v2 import flujo_mensual
 from generador_asignaciones_v2.dominio.puestos import Puesto
 from generador_asignaciones_v2.escritorio import mostrar_inicio
 from generador_asignaciones_v2.persistencia.base_datos import BaseDatos
@@ -35,6 +37,16 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+
+    def conversion_de_prueba(excel: Path) -> Path:
+        pdf = excel.with_suffix(".pdf")
+        with closing(PdfDocument.new()) as documento:
+            documento.new_page(842, 595).close()
+            documento.new_page(595, 842).close()
+            documento.save(pdf)
+        return pdf
+
+    monkeypatch.setattr(flujo_mensual, "convertir_a_pdf", conversion_de_prueba)
     respaldo = tmp_path / "Copia V1"
     respaldo.mkdir()
     (respaldo / "hermanos.json").write_text(
@@ -98,6 +110,8 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 await usuario.should_see("Publicado · versión 1")
                 usuario.find("Exportar Excel").click()
                 await usuario.should_see("Excel guardado en", retries=20)
+                usuario.find("Exportar PDF y PNG").click()
+                await usuario.should_see("Excel, PDF y PNG guardados en", retries=20)
                 usuario.find("Alcance").click()
                 usuario.find("Una semana").click()
                 await usuario.should_see("Regenerar semana")
@@ -113,4 +127,7 @@ def test_ventana_importa_genera_publica_con_vacantes_y_exporta(
                 )
 
         asyncio.run(recorrer_ventana())
-    assert len(list((tmp_path / "privado" / "exportaciones").glob("*.xlsx"))) == 1
+    exportaciones = tmp_path / "privado" / "exportaciones"
+    assert len(list(exportaciones.glob("*.xlsx"))) == 1
+    (carpeta,) = (ruta for ruta in exportaciones.iterdir() if ruta.is_dir())
+    assert sorted(r.suffix for r in carpeta.iterdir()) == [".pdf", ".png", ".png", ".xlsx"]
