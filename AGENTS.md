@@ -6,7 +6,7 @@ La V2 es una aplicación de escritorio para una persona que prepara el programa 
 
 - Mantén un monolito modular en Python. El dominio expresa semanas, plazas, disponibilidad, carga y reglas de validez con tipos independientes de la interfaz, del motor de optimización y de la base de datos. Debe poder probarse en memoria.
 - Los casos de uso coordinan generación, edición, publicación y registro de envíos. La interfaz recoge acciones y presenta resultados. El editor y el optimizador deben aplicar el mismo catálogo de reglas y comprobar sus resultados con la misma validación de dominio antes de guardar.
-- Usa Python 3.12 x64 en Windows con NiceGUI y pywebview para el escritorio y OR-Tools CP-SAT para la optimización, conforme a la fase 2. La persistencia prevista usa SQLite con SQLAlchemy y Alembic. La exportación usa Openpyxl. Mantén consultas, widgets y detalles del solucionador dentro de sus módulos. Distingue las migraciones de esquema del importador histórico de una sola ejecución.
+- Usa Python 3.12 x64 en Windows con NiceGUI y pywebview para el escritorio y OR-Tools CP-SAT para la optimización, conforme a la fase 2. La persistencia local usa SQLite con SQLAlchemy y Alembic. La exportación usa Openpyxl. Mantén consultas, widgets y detalles del solucionador dentro de sus módulos. Distingue las migraciones de esquema del importador histórico de una sola ejecución.
 - El alcance excluye Docker, microservicios, React, una API REST independiente, servidores externos, alojamiento, sincronización y autenticación multiusuario.
 - Conserva exactamente el formato visual y de impresión de las dos hojas de Excel según RF-11. Reutiliza el exportador actual donde sea posible. El dominio decide los grupos y la cobertura de cada semana.
 

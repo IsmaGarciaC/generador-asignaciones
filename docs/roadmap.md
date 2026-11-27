@@ -6,8 +6,9 @@ Las fases siguen el orden de entrega propuesto. La columna de dependencias indic
 
 - Fase 1 completada con la guía, los requisitos y la referencia V1.
 - Fase 2 completada. Se adoptan Python 3.12 x64 en Windows, NiceGUI con pywebview y OR-Tools CP-SAT. El usuario confirmó el arranque desconectado, el rechazo de acceso desde otro equipo y la apertura externa de WhatsApp. La fórmula de equidad queda sujeta a D-03 antes de la fase 8. [Resultados de escritorio](../spikes/nicegui_desktop/RESULTADOS.md) · [Resultados del solver](../spikes/assignment_solver/RESULTADOS.md)
-- Fase 3 implementada con paquete V2 independiente, catálogo semanal y regla de dobletes. Se comprobó el arranque desde el acceso directo con escucha en `127.0.0.1`. Pytest y Ruff se ejecutan en Windows mediante GitHub Actions. [Guía de la V2](../v2/README.md)
-- Sigue la fase 4 con SQLite, SQLAlchemy, Alembic y respaldo. Quedan por definir la ubicación privada, frecuencia y retención de las copias y demostrar la restauración (D-08).
+- Fase 3 completada con paquete V2 independiente, catálogo semanal y regla de dobletes. Se comprobó el arranque desde el acceso directo con escucha en `127.0.0.1`. Pytest y Ruff se ejecutan en Windows mediante GitHub Actions. [Guía de la V2](../v2/README.md)
+- Fase 4 implementada con SQLite, SQLAlchemy y dos revisiones Alembic. Los ensayos con datos ficticios conservan las referencias al migrar, revierten una escritura interrumpida y recuperan personas, programas y asignaciones en otra ubicación. La base y sus copias se guardan en el perfil local de Windows. La política de copias de D-08 queda documentada. [Respaldo y recuperación](../v2/README.md#base-local-y-respaldo)
+- Sigue la fase 5 con el importador histórico y el resumen de conciliación de RF-12. Queda por acordar el tratamiento de las identidades y fuentes ambiguas de D-07.
 
 ## Punto de partida
 

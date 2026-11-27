@@ -1,6 +1,10 @@
-"""Ventana nativa y vista del catálogo semanal."""
+"""Ventana nativa, catálogo semanal y acción de respaldo local."""
 
-from nicegui import app, html, ui
+import sqlite3
+from collections.abc import Callable
+from pathlib import Path
+
+from nicegui import app, html, run, ui
 
 from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
 
@@ -17,8 +21,15 @@ NOMBRES_PUESTOS = {
 }
 
 
-@ui.page("/")
-def mostrar_inicio() -> None:
+def mostrar_inicio(crear_respaldo: Callable[[], Path]) -> None:
+    async def respaldar() -> None:
+        try:
+            ruta = await run.io_bound(crear_respaldo)
+        except (OSError, sqlite3.Error) as error:
+            ui.notify(f"No se pudo crear el respaldo. {error}", type="negative")
+        else:
+            ui.notify(f"Respaldo guardado en {ruta}", type="positive", timeout=8000)
+
     ui.add_css("""
         body { background: #f4f6f5; color: #1c312d; font-family: "Segoe UI", sans-serif; }
         .nicegui-content { padding: 0; }
@@ -53,9 +64,14 @@ def mostrar_inicio() -> None:
             with html.tfoot(), html.tr():
                 html.th("Total semanal", scope="row")
                 html.td(str(sum(CUPOS_HABITUALES.values())))
+        ui.button("Crear respaldo", on_click=respaldar).props("outline").classes("mt-5")
 
 
-def iniciar() -> None:
+def iniciar(crear_respaldo: Callable[[], Path]) -> None:
+    @ui.page("/")
+    def inicio() -> None:
+        mostrar_inicio(crear_respaldo)
+
     app.native.start_args["gui"] = "edgechromium"
     ui.run(
         native=True,
