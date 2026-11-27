@@ -8,6 +8,8 @@ dependencies = [
     "pywebview==6.2.1",
     "SQLAlchemy==2.1.9",
     "alembic==1.20.1",
+    "ortools==9.15.6755",
+    "openpyxl==3.1.5",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,227 @@
+import json
+from collections.abc import Iterator
+from contextlib import closing
+from dataclasses import replace
+from datetime import date, timedelta
+from pathlib import Path
+from zipfile import ZipFile
+
+import pytest
+from openpyxl import load_workbook
+from sqlalchemy.exc import IntegrityError
+
+from exportador_excel import exportar_programa_excel
+from generador_asignaciones_v2.dominio.programa import (
+    Contexto,
+    Persona,
+    Semana,
+    grupos_semanales,
+    martes_del_mes,
+)
+from generador_asignaciones_v2.dominio.puestos import CUPOS_HABITUALES, Puesto
+from generador_asignaciones_v2.flujo_mensual import exportar, generar
+from generador_asignaciones_v2.importacion_v1 import aplicar, previsualizar
+from generador_asignaciones_v2.optimizador import resolver
+from generador_asignaciones_v2.persistencia.base_datos import BaseDatos
+from generador_asignaciones_v2.persistencia.programas import Programas
+
+
+@pytest.fixture
+def programas(tmp_path: Path) -> Iterator[Programas]:
+    with closing(BaseDatos(tmp_path / "Perfil privado" / "programa.sqlite3")) as base:
+        base.preparar()
+        yield Programas(base)
+
+
+def _json(carpeta: Path, nombre: str, contenido: object) -> None:
+    (carpeta / nombre).write_text(json.dumps(contenido, ensure_ascii=False), encoding="utf-8")
+
+
+def crear_copia(origen: Path) -> None:
+    origen.mkdir()
+    puestos = [p for p, cupos in CUPOS_HABITUALES.items() for _ in range(cupos)]
+    _json(
+        origen,
+        "hermanos.json",
+        [
+            {"id": i, "nombre": f"Persona {i:02d}", "roles": [p.value]}
+            for i, p in enumerate([*puestos, Puesto.AUDIO], 1)
+        ],
+    )
+    _json(origen, "ausencias.json", {"2026-12": {"Persona 01": [1], "Persona 11": [1]}})
+    _json(
+        origen,
+        "asignaciones_2026_11.json",
+        {
+            "1": {"audio": ["Persona 01"], "video": [1], "plataforma": ["Sin coincidencia"]},
+            "2": {"audio": ["Persona 11"]},
+        },
+    )
+    _json(
+        origen,
+        "estado.json",
+        {
+            "ultimo_anio": 2026,
+            "ultimo_mes": 11,
+            "siguiente_grupo_limpieza": 4,
+        },
+    )
+
+
+def test_calendario_y_rotacion_no_consumen_grupo_en_semana_cancelada() -> None:
+    fechas = martes_del_mes(2026, 12)
+    assert len(fechas) == 5 and fechas[-1] + timedelta(days=5) == date(2027, 1, 3)
+    semanas = (
+        Semana(fechas[0], martes=False),
+        Semana(fechas[1], martes=False, domingo=False),
+        Semana(fechas[2], domingo=False, desactivados=frozenset({Puesto.VIDEO})),
+    )
+    assert [len(s.plazas()) for s in semanas] == [9, 0, 7]
+    assert list(grupos_semanales(semanas, 4, 4).values()) == [(4, 3), (None, None), (1, 4)]
+    assert list(grupos_semanales(semanas, 3, 3).values()) == [(3, 2), (None, None), (1, 3)]
+
+
+def test_motor_maximiza_cobertura_y_distingue_incertidumbre() -> None:
+    fechas = martes_del_mes(2026, 12)
+    principales = {Puesto.AUDIO, Puesto.VIDEO}
+    semana = Semana(fechas[0], desactivados=frozenset(set(Puesto) - principales))
+    contexto = Contexto(
+        (semana,),
+        {
+            1: Persona(1, "Persona 01", frozenset(principales)),
+            2: Persona(2, "Persona 02", frozenset({Puesto.AUDIO})),
+        },
+    )
+    resultado = resolver(contexto)
+    assert resultado.estado == "OPTIMAL"
+    assert resultado.plan == {
+        (semana.inicio, Puesto.VIDEO, 1): 1,
+        (semana.inicio, Puesto.AUDIO, 1): 2,
+    }
+    assert not contexto.validar(resultado.plan)
+    assert resolver(contexto, segundos=0).estado == "UNKNOWN"
+
+
+def test_editar_publicar_reabrir_y_exportar_con_historial(programas: Programas, tmp_path: Path):
+    copia = tmp_path / "Copia V1"
+    crear_copia(copia)
+    originales = {r.name: r.read_bytes() for r in copia.iterdir()}
+    previa = previsualizar(copia, 2026, 12)
+    assert previa.grupo_sugerido == 4
+    assert not programas.leer(2026, 12).contexto.personas
+    resumen = aplicar(programas.base, previa)
+    assert resumen["asignaciones_historicas"] == 3
+    assert len(resumen["pendientes"]) == 1
+    assert aplicar(programas.base, previa)["repetido"]
+    assert {r.name: r.read_bytes() for r in copia.iterdir()} == originales
+    assert programas.leer(2026, 11).historico
+    vista = programas.leer(2026, 12)
+    assert vista.contexto.historial[1, date(2026, 11, 3)] == 2
+    assert (2, date(2026, 11, 3)) not in vista.contexto.historial
+
+    semanas = list(vista.borrador.semanas)
+    semanas[1] = replace(semanas[1], martes=False)
+    semanas[2] = replace(semanas[2], martes=False, domingo=False)
+    semanas[3] = replace(semanas[3], desactivados=frozenset({Puesto.VIDEO}))
+    borrador = replace(vista.borrador, semanas=tuple(semanas), grupo_inicial=4)
+    assert generar(programas, vista, borrador).plan is not None
+    vista = programas.leer(2026, 12)
+    assert len(vista.borrador.plan) == len(vista.contexto.plazas()) - 1
+    vacante = semanas[0].inicio, Puesto.AUDIO, 1
+    with pytest.raises(ValueError, match="inválida"):
+        programas.guardar(vista, replace(vista.borrador, plan={**vista.borrador.plan, vacante: 1}))
+    assert programas.leer(2026, 12).borrador == vista.borrador
+    audio = semanas[1].inicio, Puesto.AUDIO, 1
+    nuevo = 11 if vista.borrador.plan[audio] == 1 else 1
+    programas.guardar(vista, replace(vista.borrador, plan={**vista.borrador.plan, audio: nuevo}))
+    vista = programas.leer(2026, 12)
+    with pytest.raises(ValueError, match="Confirma"):
+        programas.publicar(vista)
+    assert programas.publicar(vista, acepta_vacantes=True) == 1
+    assert programas.publicar(programas.leer(2026, 12), acepta_vacantes=True) == 1
+    activa = vista.contexto.personas[nuevo]
+    programas.guardar_persona(nuevo, "Nombre actualizado", "", activa.puestos, True)
+    vista = programas.leer(2026, 12)
+    programas.guardar(
+        vista,
+        replace(vista.borrador, plan={**vista.borrador.plan, audio: 1 if nuevo == 11 else 11}),
+    )
+
+    with closing(BaseDatos(programas.base.ruta)) as reabierta:
+        reabierta.preparar()
+        reabiertos = Programas(reabierta)
+        vigente = reabiertos.leer(2026, 12)
+        assert vigente.version == 1 and not vigente.publicado_al_dia
+        assert vigente.borrador.plan[audio] != nuevo
+        archivo = exportar(reabiertos, 2026, 12)
+        assert archivo.parent == reabierta.ruta.parent / "exportaciones"
+        with closing(load_workbook(archivo)) as libro:
+            assert libro.sheetnames == ["Programa General", "Audio y Video"]
+            av = libro["Audio y Video"]
+            assert av["B3"].value == "—"
+            assert av["C3"].value == activa.nombre
+            assert av["D3"].value == "Cancelada"
+            assert av["E4"].value == "No requerido"
+        enero = reabiertos.leer(2027, 1)
+        assert enero.borrador.grupo_inicial == 4
+        assert enero.contexto.historial[nuevo, semanas[1].inicio] == 1
+
+
+@pytest.mark.parametrize("mes", [11, 12])
+def test_excel_ordinario_conserva_xml_de_las_dos_hojas(
+    mes: int,
+    programas: Programas,
+    tmp_path: Path,
+) -> None:
+    mes_v1 = {}
+    vista = programas.leer(2026, mes)
+    padron = {}
+    for puesto, cupos in CUPOS_HABITUALES.items():
+        for cupo in range(1, cupos + 1):
+            nombre = f"Persona {puesto.value} {cupo}"
+            ident = programas.guardar_persona(None, nombre, "", frozenset({puesto}), True)
+            padron[puesto, cupo] = ident, nombre
+    vista = programas.leer(2026, mes)
+    plan = {}
+    for indice, semana in enumerate(vista.borrador.semanas, 1):
+        mes_v1[indice] = {}
+        for fecha, puesto, cupo in semana.plazas():
+            ident, nombre = padron[puesto, cupo]
+            plan[fecha, puesto, cupo] = ident
+            mes_v1[indice].setdefault(puesto.value, []).append(nombre)
+    programas.guardar(vista, replace(vista.borrador, plan=plan, grupo_inicial=4))
+    programas.publicar(programas.leer(2026, mes))
+    referencia = tmp_path / "V1.xlsx"
+    exportar_programa_excel(mes_v1, 2026, mes, 4, str(referencia))
+    with ZipFile(referencia) as v1, ZipFile(exportar(programas, 2026, mes)) as v2:
+        for xml in ("workbook.xml", "styles.xml", "worksheets/sheet1.xml", "worksheets/sheet2.xml"):
+            assert v1.read(f"xl/{xml}") == v2.read(f"xl/{xml}")
+
+
+def test_importacion_ambigua_y_reintento_tras_error(programas: Programas, tmp_path: Path):
+    origen = tmp_path / "V1"
+    origen.mkdir()
+    _json(
+        origen,
+        "hermanos.json",
+        [
+            {"id": 1, "nombre": "Persona A", "roles": ["audio"]},
+            {"id": 2, "nombre": "Persona A", "roles": ["video"]},
+        ],
+    )
+    _json(origen, "asignaciones_2026_11.json", {"1": {"audio": ["Persona A"], "video": [2]}})
+    previa = previsualizar(origen, 2026, 12)
+    assert len(previa.pendientes) == 1
+    with programas.base.motor.begin() as conexion:
+        conexion.exec_driver_sql(
+            "CREATE TRIGGER fallo BEFORE INSERT ON lotes_importados "
+            "BEGIN SELECT RAISE(ABORT, 'interrupción'); END"
+        )
+    with pytest.raises(IntegrityError, match="interrupción"):
+        aplicar(programas.base, previa)
+    assert not programas.leer(2026, 12).contexto.personas
+    assert not programas.leer(2026, 11).historico
+    with programas.base.motor.begin() as conexion:
+        conexion.exec_driver_sql("DROP TRIGGER fallo")
+    assert aplicar(programas.base, previa)["asignaciones_historicas"] == 1
+    assert aplicar(programas.base, previa)["repetido"]

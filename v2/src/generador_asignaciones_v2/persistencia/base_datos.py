@@ -2,7 +2,8 @@
 
 import os
 import sqlite3
-from contextlib import AbstractContextManager
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
@@ -37,7 +38,7 @@ def _configurar_conexion(dbapi: sqlite3.Connection, _registro: object) -> None:
 
 def _iniciar_transaccion(conexion: Connection) -> None:
     # La preparación toma el turno de escritor antes de leer la revisión.
-    sql = "BEGIN IMMEDIATE" if conexion.get_execution_options().get("preparar") else "BEGIN"
+    sql = "BEGIN IMMEDIATE" if conexion.get_execution_options().get("reservar") else "BEGIN"
     conexion.exec_driver_sql(sql)
 
 
@@ -56,7 +57,7 @@ class BaseDatos:
             "script_location", "generador_asignaciones_v2.persistencia:migraciones"
         )
         revisiones = ScriptDirectory.from_config(config)
-        with self.motor.connect().execution_options(preparar=True) as conexion, conexion.begin():
+        with self.motor.connect().execution_options(reservar=True) as conexion, conexion.begin():
             identificador = conexion.exec_driver_sql("PRAGMA application_id").scalar_one()
             actual = None
             if identificador == ID_APLICACION:
@@ -82,6 +83,14 @@ class BaseDatos:
     def transaccion(self) -> AbstractContextManager[Session]:
         """Confirma todo el trabajo en conjunto y revierte si se propaga una excepción."""
         return self._sesiones.begin()
+
+    @contextmanager
+    def escritura(self) -> Iterator[Session]:
+        """Serializa una comprobación seguida de una escritura en la misma transacción."""
+        with self.motor.connect().execution_options(reservar=True) as conexion:
+            with conexion.begin(), Session(conexion) as sesion:
+                yield sesion
+                sesion.flush()
 
     @property
     def _carpeta_respaldos(self) -> Path:

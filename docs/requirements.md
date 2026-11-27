@@ -112,15 +112,15 @@ Migrar todos los datos recuperables mediante un script de una sola ejecución. I
 | RNF-04 | Monolito modular sencillo, mantenible y tipado. Negocio independiente de interfaz y persistencia. Evitar abstracciones prematuras y dependencias innecesarias. | Ejecutar pruebas de reglas sin abrir la interfaz ni una base real. Revisar dependencias entre módulos, pruebas con Pytest, análisis con Ruff y automatización prevista con GitHub Actions. |
 | RNF-05 | Documentación en español y límites arquitectónicos de la V2. | Revisar la documentación y comprobar que la solución respeta las exclusiones y la selección tecnológica provisional de la [guía de desarrollo](../AGENTS.md). |
 
-## Decisiones abiertas
+## Decisiones de producto
 
-| ID | Decisión que falta validar | Evidencia o pregunta para resolverla |
+| ID | Tema | Acuerdo o comprobación pendiente |
 | --- | --- | --- |
-| D-01 | Aplicabilidad de los puestos al cancelar una reunión y adscripción de semanas limítrofes. | Confirmar las dos cancelaciones parciales de RF-03. V1 atribuye la semana al mes del martes, incluso cuando el domingo cae en el mes o año siguiente. Confirmar esa convención para V2. |
-| D-02 | Publicación y correcciones posteriores. | ¿Se permite publicar con vacantes? ¿Qué versión queda vigente para recordatorios al corregir un programa publicado? |
+| D-01 | Aplicabilidad de los puestos al cancelar una reunión y adscripción de semanas limítrofes. | Se confirmó que la semana pertenece al mes de su martes. El flujo aplica las cancelaciones parciales descritas en RF-03 para su validación en uso. |
+| D-02 | Publicación y correcciones posteriores. | Se permite publicar con vacantes tras ver el detalle y confirmar. Una edición posterior se guarda en borrador y la última publicación sigue vigente hasta volver a publicar. |
 | D-03 | Cálculo de equidad con información incompleta. | Acordar cómo comparar conteo y proporción, tratar disponibilidad desconocida o denominador cero y desempatar preferencias del mismo nivel. |
 | D-04 | Cambios posteriores en la rotación. | Acordar desde qué semana surte efecto un cambio de número de grupos, de grupo inicial o de cancelación cuando ya existen meses posteriores. Preservar el historial confirmado. |
 | D-05 | Operación de la ronda semanal. | Precisar hora local del martes por la tarde, actuación si la aplicación está cerrada y tratamiento de cambios de destinatario o puesto tras una confirmación. |
-| D-06 | Representación y conversión de exportaciones. | Aprobar el texto o marca para cada estado y evaluar la conversión local a PDF y PNG frente al Excel de referencia de ambas hojas. |
+| D-06 | Representación y conversión de exportaciones. | El Excel usa «—» para una vacante, «No requerido» para un puesto inaplicable y «Cancelada» para una semana sin reuniones. Queda verificar la conversión local a PDF y PNG frente a ambas hojas de referencia. |
 | D-07 | Recuperación de fuentes heredadas incompletas o discordantes. | Definir cómo resolver manualmente identidades y divergencias entre JSON y Excel, y qué estado de publicación dar a meses importados sin evidencia de publicación. |
 | D-08 | Viabilidad técnica, distribución y respaldo. | Validar versiones compatibles, inicio local y capacidad de CP-SAT en Windows. Definir ubicación privada, frecuencia y retención de copias y demostrar la restauración. |

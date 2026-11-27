@@ -3,11 +3,13 @@
 from datetime import date
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Enum,
     ForeignKey,
     ForeignKeyConstraint,
     UniqueConstraint,
+    text,
     true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -65,6 +67,10 @@ class Programa(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     anio: Mapped[int]
     mes: Mapped[int]
+    num_grupos: Mapped[int] = mapped_column(server_default=text("4"))
+    grupo_inicial: Mapped[int] = mapped_column(server_default=text("1"))
+    revision: Mapped[int] = mapped_column(server_default=text("0"))
+    historico: Mapped[bool] = mapped_column(server_default=text("0"))
 
 
 class SemanaPrograma(Base):
@@ -78,6 +84,9 @@ class SemanaPrograma(Base):
     inicio_semana: Mapped[date] = mapped_column(primary_key=True)
     limpieza: Mapped[int | None]
     hospitalidad: Mapped[int | None]
+    martes: Mapped[bool] = mapped_column(server_default=true())
+    domingo: Mapped[bool] = mapped_column(server_default=true())
+    desactivados: Mapped[list[str]] = mapped_column(JSON, server_default=text("'[]'"))
 
 
 class Asignacion(Base):
@@ -95,3 +104,19 @@ class Asignacion(Base):
     puesto: Mapped[Puesto] = mapped_column(primary_key=True)
     plaza: Mapped[int] = mapped_column(primary_key=True)
     hermano_id: Mapped[int | None] = mapped_column(ForeignKey("hermanos.id"), index=True)
+
+
+class Publicacion(Base):
+    __tablename__ = "publicaciones"
+
+    programa_id: Mapped[int] = mapped_column(ForeignKey("programas.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(primary_key=True)
+    revision_borrador: Mapped[int]
+    contenido: Mapped[dict] = mapped_column(JSON)
+
+
+class LoteImportado(Base):
+    __tablename__ = "lotes_importados"
+
+    huella: Mapped[str] = mapped_column(primary_key=True)
+    resumen: Mapped[dict] = mapped_column(JSON)

@@ -77,7 +77,7 @@ def test_base_vacia_con_esquema_al_dia(base: BaseDatos) -> None:
     with base.motor.connect() as conexion:
         assert conexion.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         contexto = MigrationContext.configure(conexion, opts={"compare_server_default": True})
-        assert contexto.get_current_revision() == "0002"
+        assert contexto.get_current_revision() == "0003"
         assert compare_metadata(contexto, Base.metadata) == []
     with base.transaccion() as sesion:
         assert sesion.scalars(select(Programa)).all() == []

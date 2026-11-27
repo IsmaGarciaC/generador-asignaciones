@@ -33,8 +33,9 @@ def ejecutar() -> int:
                     print(base.ruta)
                 else:
                     from generador_asignaciones_v2.escritorio import iniciar
+                    from generador_asignaciones_v2.persistencia.programas import Programas
 
-                    iniciar(base.respaldar)
+                    iniciar(Programas(base))
     except (OSError, sqlite3.Error, SQLAlchemyError, CommandError) as error:
         mensaje = f"No se pudo completar la operación.\n{error}"
         if sys.stderr is None and sys.platform == "win32":

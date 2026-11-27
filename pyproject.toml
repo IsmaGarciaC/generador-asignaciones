@@ -22,6 +22,9 @@ line-length = 100
 target-version = "py310"
 src = ["src", "v2/src"]
 
+[tool.ruff.per-file-target-version]
+"v2/**/*.py" = "py312"
+
 [tool.ruff.lint]
 select = ["E", "F", "B", "W", "I"]
 ignore = []
